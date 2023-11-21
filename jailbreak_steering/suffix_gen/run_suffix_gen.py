@@ -12,7 +12,7 @@ from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
 
 MODEL_PATH = "meta-llama/Llama-2-7b-chat-hf"
-DATASET_PATH = "datasets/advbench/harmful_behaviors.csv"
+DATASET_PATH = "datasets/advbench/harmful_behaviors_train.csv"
 RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
 LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 ALL_RESULTS_FILENAME = "all_results.json"
@@ -84,10 +84,10 @@ def evaluate_target_loss(
     return loss
 
 def evaluate_generation(
-        model: AutoModelForCausalLM,
-        tokenizer: AutoTokenizer,
-        prompt: PromptManager,
-        max_new_tokens: int=256,
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    prompt: PromptManager,
+    max_new_tokens: int=256,
 ):
     outputs = model.generate(
         prompt.input_ids[:prompt._target_slice.start].unsqueeze(0).to(model.device),
