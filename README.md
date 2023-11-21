@@ -18,6 +18,7 @@ HF_TOKEN=huggingface_token_with_access_to_llama2
 
 ### Suffix Generation
 
+From the root directory, run:
 ```bash
-python3 -m jailbreak_steering.suffix_generation.jailbreak
+python3 -m jailbreak_steering.suffix_gen.run_suffix_gen
 ```

@@ -1,35 +1,4 @@
 import torch
-import json
-import gc
-import os
-import pandas as pd
-
-def get_instructions_and_targets(csv_file: str, n_train_data: int=None):
-    instructions = []
-    targets = []
-
-    dataset = pd.read_csv(csv_file)
-    instructions = dataset['goal'].tolist()
-    targets = dataset['target'].tolist()
-
-    if n_train_data is not None:
-        instructions = instructions[:n_train_data]
-        targets = targets[:n_train_data]
-
-    return instructions, targets
-
-# check if a jailbreak for some prompt has already been computed
-def check_if_done(file_path, instruction):
-    if not os.path.exists(file_path):
-        return False
-
-    jailbreaks = json.load(open(file_path, "r"))
-
-    for jailbreak in jailbreaks:
-        if jailbreak["instruction"] == instruction:
-            return True
-        
-    return False
 
 def get_nonascii_toks(tokenizer, device='cpu'):
     def is_ascii(s):
