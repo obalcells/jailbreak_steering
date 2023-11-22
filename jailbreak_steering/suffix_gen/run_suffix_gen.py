@@ -18,7 +18,7 @@ LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 ALL_RESULTS_FILENAME = "all_results.json"
 SUCCESSFUL_RESULTS_FILENAME = "successful_results.json"
 
-N_INSTRUCTIONS = 10 # None for all
+N_INSTRUCTIONS = 10 # change to 'None' to run on all instructions
 
 def get_config():
     return {
@@ -26,7 +26,7 @@ def get_config():
         'n_steps': 150,
         'batch_size': 256,
         'topk': 128,
-        'early_stop_threshold': 0.05,
+        'early_stop_threshold': 0.04,
         'success_threshold': 0.1,
         'reuse_control': True,
         'reset_control_after': 5,
@@ -140,9 +140,9 @@ def main():
     instructions, targets = load_dataset(DATASET_PATH, n=N_INSTRUCTIONS)
     config = get_config()
 
-    np.random.seed(0)
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
 
     control_init = config['default_control_init']
     all_results = []
