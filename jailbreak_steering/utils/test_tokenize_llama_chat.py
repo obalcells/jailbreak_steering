@@ -16,9 +16,9 @@ def test_tokenize_llama_chat_single_instruction_no_response(tokenizer):
     response = None
     conversation = [(instruction, response)]
 
-    expected_output = (f"<s> {B_INST} {instruction} {E_INST} ")
+    expected_output = (f"<s> {B_INST} {instruction} {E_INST}")
     toks = tokenize_llama_chat(tokenizer, conversation, system_prompt, no_final_eos=True)
-
+    
     assert tokenizer.decode(toks) == expected_output
 
 def test_tokenize_llama_chat_single_instruction_with_response(tokenizer):
@@ -27,7 +27,7 @@ def test_tokenize_llama_chat_single_instruction_with_response(tokenizer):
     response = "Sure, here's how to make a pie"
     conversation = [(instruction, response)]
 
-    expected_output = (f"<s> {B_INST} {instruction} {E_INST} " + f" {response}")
+    expected_output = (f"<s> {B_INST} {instruction} {E_INST} {response}")
     toks = tokenize_llama_chat(tokenizer, conversation, system_prompt, no_final_eos=True)
 
     assert tokenizer.decode(toks) == expected_output

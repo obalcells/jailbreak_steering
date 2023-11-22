@@ -29,13 +29,6 @@ def tokenize_llama_chat(
         instruction, model_output=None, is_first_message=False, no_eos=False
     ) -> List[int]:
 
-        # NOTE:
-        # For the instructions, we add a space after the E_INST token.
-        # When we tokenize the instruction on its own, the space is encoded as token 29871.
-        # When we tokenize instruction + response, the space is not encoded as a token.
-        # Thus, to make the tokenization consistent, we tokenize the instruction and response separately,
-        # and then concatenate them.        
-
         if is_first_message and system_prompt and len(system_prompt) > 0:
             system_content = B_SYS + system_prompt + E_SYS
         else:
@@ -43,22 +36,15 @@ def tokenize_llama_chat(
 
         instruction_content = system_content + instruction.strip()
 
-        instruction_toks = tokenizer.encode(f"{B_INST} {instruction_content.strip()} {E_INST} ")
-
         if model_output and len(model_output) > 0:
             if no_eos:
                 response_content = model_output.strip()
             else:
                 response_content = f"{model_output.strip()} {tokenizer.eos_token}"
-
-            response_toks = tokenizer.encode(
-                response_content,
-                add_special_tokens=False # don't append <s>
-            )
+            
+            return tokenizer.encode(f"{B_INST} {instruction_content} {E_INST} {response_content}")
         else:
-            response_toks = []
-
-        return instruction_toks + response_toks
+            return tokenizer.encode(f"{B_INST} {instruction_content} {E_INST}")
 
     tokens = []
     for i, (user_input, model_output) in enumerate(conversation):

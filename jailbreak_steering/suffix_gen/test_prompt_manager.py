@@ -31,8 +31,8 @@ def test_prompt_manager(tokenizer):
         control,
     )
 
-    expected_prompt_str = (f"<s> {B_INST} {instruction} {control} {E_INST} " + f" {target}")
-    assert prompt_manager.prompt_str == expected_prompt_str
+    expected_prompt_str = (f"<s> {B_INST} {instruction} {control} {E_INST} {target}")
+    assert prompt_manager.full_prompt_str == expected_prompt_str
 
     assert prompt_manager.instruction_str == instruction
     assert prompt_manager.assistant_role_str == E_INST

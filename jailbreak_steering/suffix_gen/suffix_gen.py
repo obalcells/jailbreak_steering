@@ -58,7 +58,6 @@ class SuffixGen():
 
         best_loss = float('inf')
         best_control = self.prompt.control_str
-        best_n_steps = -1
 
         for step in range(n_steps):
             start = time.time()
@@ -71,7 +70,6 @@ class SuffixGen():
             if loss < best_loss:
                 best_loss = loss
                 best_control = control
-                best_n_steps = step
             if loss < self.early_stop_threshold:
                 break
 
@@ -79,7 +77,7 @@ class SuffixGen():
                 self._save_logs(self.log)
 
         self._save_logs(self.log)
-        return best_control, best_loss, best_n_steps
+        return best_control, best_loss, step
 
     def step(
         self,

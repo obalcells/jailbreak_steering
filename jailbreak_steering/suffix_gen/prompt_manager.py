@@ -36,13 +36,12 @@ class PromptManager(object):
         self._target_slice = find_string_in_tokens(self.target, toks, self.tokenizer) 
         self._loss_slice = slice(self._target_slice.start-1, self._target_slice.stop-1)
         
-        # there should be an encoded space between the end of the assistant role and the start of the target
-        assert self._target_slice.start == self._assistant_role_slice.stop + 1
+        assert self._target_slice.start == self._assistant_role_slice.stop
 
         self.input_ids = torch.tensor(toks[:self._target_slice.stop], device='cpu')
 
     @property
-    def prompt_str(self):
+    def full_prompt_str(self):
         return self.tokenizer.decode(self.input_ids)
 
     @property
