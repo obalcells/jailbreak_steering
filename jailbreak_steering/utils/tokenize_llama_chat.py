@@ -69,3 +69,34 @@ def tokenize_llama_chat(
             no_final_eos and (i == len(conversation) - 1),
         )
     return tokens
+
+# performs a binary search to look for a target string inside some tokens, returns a slice of where the target's tokens are located
+def find_string_in_tokens(target, tokens, tokenizer) -> slice:
+    assert target in tokenizer.decode(tokens), "The target isn't contained in the whole array of tokens"
+    # we first perform the binary search over the end index of the slice
+    end_idx_left, end_idx_right = 0, len(tokens) 
+    while end_idx_left != end_idx_right:
+        mid = (end_idx_right + end_idx_left) // 2
+        if target in tokenizer.decode(tokens[:mid]):
+            end_idx_right = mid
+        else:
+            end_idx_left = mid + 1
+    end_idx = end_idx_left
+    # now we perform the binary search over the start index of the slice
+    start_idx_left, start_idx_right = 0, end_idx-1 
+    while start_idx_left != start_idx_right:
+        mid = (start_idx_right + start_idx_left + 1) // 2
+        if target in tokenizer.decode(tokens[mid:end_idx]):
+            start_idx_left = mid
+        else:
+            start_idx_right = mid-1
+    start_idx = start_idx_left
+    target_slice = slice(start_idx, end_idx)
+    assert target in tokenizer.decode(tokens[target_slice])
+    return target_slice
+
+def get_ascii_toks(tokenizer):
+    return [
+        token_id for token_id in range(3, tokenizer.vocab_size)
+        if tokenizer.decode([token_id]).isascii() and tokenizer.decode([token_id]).isprintable()
+    ]

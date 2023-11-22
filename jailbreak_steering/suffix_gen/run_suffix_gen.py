@@ -6,17 +6,16 @@ import torch
 import pandas as pd
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from dotenv import load_dotenv
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
+from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
 
 MODEL_PATH = "meta-llama/Llama-2-7b-chat-hf"
 DATASET_PATH = "datasets/advbench/harmful_behaviors_train.csv"
-RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
 LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-ALL_RESULTS_FILENAME = "all_results.json"
-SUCCESSFUL_RESULTS_FILENAME = "successful_results.json"
+ALL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "all_results.json")
+SUCCESSFUL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "successful_results.json")
 
 N_INSTRUCTIONS = 10 # change to 'None' to run on all instructions
 
@@ -33,28 +32,6 @@ def get_config():
         'default_control_init': ' '.join(['!' for _ in range(30)]),
         'verbose': True,
     }
-
-def load_model_and_tokenizer():
-    load_dotenv()
-    huggingface_token = os.environ["HF_TOKEN"]
-
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_PATH,
-        token=huggingface_token,
-        torch_dtype=torch.float16,
-        low_cpu_mem_usage=True,
-        use_cache=False,
-    ).to('cuda').eval()
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_PATH,
-        token=huggingface_token,
-        use_fast=False
-    )
-    tokenizer.pad_token = "[PAD]"
-    tokenizer.padding_side = "left"
-
-    return model, tokenizer
 
 def load_dataset(dataset_path: str, n: int=None):
     instructions = []
@@ -127,16 +104,18 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config)
     return control_str, runtime, loss, steps, gen_str, success
 
 def save_results(all_results, successful_results):
-    if not os.path.exists(RESULTS_DIR):
-        os.makedirs(RESULTS_DIR)
+    if not os.path.exists(os.path.dirname(ALL_RESULTS_PATH)):
+        os.makedirs(os.path.dirname(ALL_RESULTS_PATH))
 
-    with open(os.path.join(RESULTS_DIR, ALL_RESULTS_FILENAME), "w") as file:
+    with open(ALL_RESULTS_PATH, "w") as file:
         json.dump(all_results, file, indent=4)
-    with open(os.path.join(RESULTS_DIR, SUCCESSFUL_RESULTS_FILENAME), "w") as file:
+    with open(SUCCESSFUL_RESULTS_PATH, "w") as file:
         json.dump(successful_results, file, indent=4)
 
 def main():
-    model, tokenizer = load_model_and_tokenizer()
+    model = load_llama_2_7b_chat_model()
+    tokenizer = load_llama_2_7b_chat_tokenizer()
+
     instructions, targets = load_dataset(DATASET_PATH, n=N_INSTRUCTIONS)
     config = get_config()
 
