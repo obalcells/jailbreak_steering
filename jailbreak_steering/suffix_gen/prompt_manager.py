@@ -1,8 +1,7 @@
 import torch
 from transformers import AutoTokenizer
 
-from jailbreak_steering.suffix_gen.suffix_gen_utils import find_string_in_tokens
-from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST
+from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST, find_string_in_tokens
 
 class PromptManager(object):
     """A class used to manage the prompt during optimization."""
