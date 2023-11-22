@@ -2,7 +2,7 @@ import torch
 from transformers import AutoTokenizer
 
 from jailbreak_steering.suffix_gen.suffix_gen_utils import find_string_in_tokens
-from jailbreak_steering.utils.tokenize_llama2 import tokenize_llama_chat, E_INST
+from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST
 
 class PromptManager(object):
     """A class used to manage the prompt during optimization."""
@@ -36,31 +36,35 @@ class PromptManager(object):
         self._assistant_role_slice = find_string_in_tokens(E_INST, toks, self.tokenizer)
         self._target_slice = find_string_in_tokens(self.target, toks, self.tokenizer) 
         self._loss_slice = slice(self._target_slice.start-1, self._target_slice.stop-1)
-        assert self._target_slice.start == self._assistant_role_slice.stop, "Target starts when assistant role ends"
+        
+        # there should be an encoded space between the end of the assistant role and the start of the target
+        assert self._target_slice.start == self._assistant_role_slice.stop + 1
 
         self.input_ids = torch.tensor(toks[:self._target_slice.stop], device='cpu')
 
     @property
-    def instruction_str(self):
-        return self.tokenizer.decode(self.input_ids[self._instruction_slice]).strip()
+    def prompt_str(self):
+        return self.tokenizer.decode(self.input_ids)
 
-    @instruction_str.setter
-    def instruction_str(self, instruction):
-        self.instruction = instruction
-        self._update_ids()
-    
+    @property
+    def instruction_str(self):
+        return self.tokenizer.decode(self.input_ids[self._instruction_slice])
+
+    @property
+    def assistant_role_str(self):
+        return self.tokenizer.decode(self.input_ids[self._assistant_role_slice])
+
     @property
     def target_str(self):
-        return self.tokenizer.decode(self.input_ids[self._target_slice]).strip()
-    
-    @target_str.setter
-    def target_str(self, target):
-        self.target = target
-        self._update_ids()
+        return self.tokenizer.decode(self.input_ids[self._target_slice])
+
+    @property
+    def loss_str(self):
+        return self.tokenizer.decode(self.input_ids[self._loss_slice])
 
     @property
     def control_str(self):
-        return self.tokenizer.decode(self.input_ids[self._control_slice]).strip()
+        return self.tokenizer.decode(self.input_ids[self._control_slice])
     
     @control_str.setter
     def control_str(self, control):

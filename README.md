@@ -22,3 +22,10 @@ From the root directory, run:
 ```bash
 python3 -m jailbreak_steering.suffix_gen.run_suffix_gen
 ```
+
+## Tests
+
+To run tests, run:
+```bash
+pytest
+```

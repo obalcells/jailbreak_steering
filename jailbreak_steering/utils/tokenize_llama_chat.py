@@ -9,12 +9,12 @@ If a question does not make any sense, or is not factually coherent, explain why
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
-# Borrowed from https://github.com/nrimsky/SycophancySteering/blob/main/utils/tokenize_llama.py
+# Based off of https://github.com/nrimsky/SycophancySteering/blob/main/utils/tokenize_llama.py
 def tokenize_llama_chat(
     tokenizer,
     conversation: List[Tuple[str, Optional[str]]],
     system_prompt: str=DEFAULT_SYSTEM_PROMPT,
-    no_final_eos=False,
+    no_final_eos: bool=True,
 ) -> List[int]:
     """
     tokenizer: a HuggingFace tokenizer
@@ -27,26 +27,38 @@ def tokenize_llama_chat(
 
     def _instruction_response_to_tokens(
         instruction, model_output=None, is_first_message=False, no_eos=False
-    ):
-        if system_prompt and len(system_prompt) > 0:
+    ) -> List[int]:
+
+        # NOTE:
+        # For the instructions, we add a space after the E_INST token.
+        # When we tokenize the instruction on its own, the space is encoded as token 29871.
+        # When we tokenize instruction + response, the space is not encoded as a token.
+        # Thus, to make the tokenization consistent, we tokenize the instruction and response separately,
+        # and then concatenate them.        
+
+        if is_first_message and system_prompt and len(system_prompt) > 0:
             system_content = B_SYS + system_prompt + E_SYS
         else:
             system_content = ""
 
-        if is_first_message:
-            dialog_content = system_content + instruction.strip()
-        else:
-            dialog_content = instruction.strip()
-        if model_output is not None:
+        instruction_content = system_content + instruction.strip()
+
+        instruction_toks = tokenizer.encode(f"{B_INST} {instruction_content.strip()} {E_INST} ")
+
+        if model_output and len(model_output) > 0:
             if no_eos:
-                return tokenizer.encode(
-                    f"{B_INST} {dialog_content.strip()} {E_INST} {model_output.strip()}"
-                )
-            return tokenizer.encode(
-                f"{B_INST} {dialog_content.strip()} {E_INST} {model_output.strip()} {tokenizer.eos_token}"
+                response_content = model_output.strip()
+            else:
+                response_content = f"{model_output.strip()} {tokenizer.eos_token}"
+
+            response_toks = tokenizer.encode(
+                response_content,
+                add_special_tokens=False # don't append <s>
             )
         else:
-            return tokenizer.encode(f"{B_INST} {dialog_content.strip()} {E_INST}")
+            response_toks = []
+
+        return instruction_toks + response_toks
 
     tokens = []
     for i, (user_input, model_output) in enumerate(conversation):

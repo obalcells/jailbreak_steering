@@ -30,7 +30,7 @@ def get_config():
         'success_threshold': 0.1,
         'reuse_control': True,
         'reset_control_after': 5,
-        'default_control_init': ' '.join(['!' for _ in range(20)]),
+        'default_control_init': ' '.join(['!' for _ in range(30)]),
         'verbose': True,
     }
 
