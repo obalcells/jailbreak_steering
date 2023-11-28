@@ -4,10 +4,8 @@ from transformers import AutoTokenizer
 from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_tokenizer
 from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, B_INST, E_INST
 
-MODEL_PATH = "meta-llama/Llama-2-7b-chat-hf"
-
 @pytest.fixture(scope="module")
-def tokenizer():
+def tokenizer() -> AutoTokenizer:
     return load_llama_2_7b_chat_tokenizer()
 
 def test_tokenize_llama_chat_single_instruction_no_response(tokenizer):

@@ -1,19 +1,14 @@
 import os
-import numpy as np
-import torch
-from torch import Tensor
 import json
 import pandas as pd
-from jaxtyping import Int, Float
-from typing import Tuple, List, Optional, Dict
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, pipeline
-import gc
-from dotenv import load_dotenv
+
+from typing import List, Dict
+from transformers import pipeline
 from vllm import SamplingParams
 from vllm import LLM
 
 MODEL_PATH = "georgesung/open_llama_7b_qlora_uncensored"
-DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets")
+DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets", "unprocessed")
 ADVBENCH_DATASET_PATH = os.path.join(DATASETS_DIR, "advbench/harmful_behaviors_train.csv")
 REFUSALBENCH_DATASET_PATH = os.path.join(DATASETS_DIR, "refusalbench/refusalbench_train.json")
 

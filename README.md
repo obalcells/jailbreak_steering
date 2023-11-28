@@ -16,27 +16,47 @@ HF_TOKEN=huggingface_token_with_access_to_llama2
 
 ## Usage
 
+Note that all commands should be run from the root directory.
+
 ### Suffix generation
 
+In this step, we take a dataset of instructions, and generate a suffix for each instruction that induces the desired behavior (e.g. not refusing a dangerous instruction).
 
-From the root directory, run:
+To run this step on a dataset of instructions:
 ```bash
-python3 -m jailbreak_steering.suffix_gen.run_suffix_gen
+python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
+    --dataset_path <path_to_dataset> \
+    --results_dir <path_to_results_dir> \
+    --logs_dir <path_to_logs_dir>
+```
+
+- `dataset_path` is points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
+- `output_dir` is the directory where the generated suffixes will be saved.
+- `logs_dir` is the directory where the logs will be saved.
+
+### Process suffix generation results
+
+Before generating steering vectors, we'll process the results from suffix generation,
+creating a dataset with the proper formatting.
+
+To run this step:
+```bash
+python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
+    --suffix_gen_results_path <path_to_suffix_gen_results> \
+    --output_dir <path_to_output_dir>
 ```
 
 ### Vector generation
 
-Before generating steering vectors, we'll process the results from suffix generation,
-creating a dataset with the proper formatting.
-```bash
-python3 -m jailbreak_steering.vector_gen.process_suffix_gen
-```
-
-This will output datasets in `jailbreak_steering/vector_gen/instruction_datasets/`.
-
 To generate steering vectors, run:
 ```bash
-python3 -m jailbreak_steering.vector_gen.run_vector_gen
+python3 -m jailbreak_steering.vector_gen.run_vector_gen \
+    --label <label> \
+    --data_path <path_to_data> \
+    --layers <layers> \
+    --vectors_dir <path_to_vectors_dir> \
+    --activations_dir <path_to_activations_dir> \
+    --save_activations <save_activations>
 ```
 
 ## Tests
@@ -45,3 +65,7 @@ To run tests, run:
 ```bash
 pytest
 ```
+
+
+## Step-by-step
+

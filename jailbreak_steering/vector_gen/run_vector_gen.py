@@ -2,61 +2,31 @@
 
 """
 Generates steering vectors for each layer of the model by averaging the activations of all the positive and negative examples.
-
-Usage:
-python generate_vectors.py --label 'jailbreak_no_suffix' --data_path '/path/to/dataset' --layers 10 11 12 13 14 --save_activations
 """
 
-import json
 import torch as t
 import argparse
 import os
 
-from torch.utils.data import Dataset
 from tqdm import tqdm
 from typing import List
 
 from jailbreak_steering.utils.llama_wrapper import LlamaWrapper
-from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat
-from jailbreak_steering.vector_gen.process_suffix_gen import NO_SUFFIX_DATASET_PATH, RANDOM_SUFFIX_DATASET_PATH
+from jailbreak_steering.vector_gen.comparison_datasets import InstructionAnswerComparisonDataset, InstructionComparisonDataset
+from jailbreak_steering.suffix_gen.process_suffix_gen import DEFAULT_OUTPUT_DIR, NO_SUFFIX_DATASET_FILENAME
 
-SAVE_VECTORS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vectors")
-SAVE_ACTIVATIONS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activations")
+DEFAULT_DATASET_PATH = os.path.join(DEFAULT_OUTPUT_DIR, NO_SUFFIX_DATASET_FILENAME)
+DEFAULT_LABEL = "no_suffix"
+DEFAULT_VECTORS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vectors")
+DEFAULT_ACTIVATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activations")
+
 SYSTEM_PROMPT = None
 
-DEFAILT_DATASET_PATH = NO_SUFFIX_DATASET_PATH
-DEFAULT_LABEL = "jailbreak_no_suffix"
-
-class InstructionComparisonDataset(Dataset):
-    def __init__(self, data_path, system_prompt, tokenizer):
-        self.data = json.load(open(data_path, "r")) 
-        self.system_prompt = system_prompt
-        self.tokenizer = tokenizer
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        p_inst = item["instruction_inducing_behavior"]
-        n_inst = item["instruction_not_inducing_behavior"]
-        p_tokens = self._instruction_to_tokens(p_inst)
-        n_tokens = self._instruction_to_tokens(n_inst)
-        return p_tokens, n_tokens
-
-    def _instruction_to_tokens(self, instruction: str):
-        instruction_toks = tokenize_llama_chat(self.tokenizer, [(f"{instruction}", None)], self.system_prompt, no_final_eos=True)
-        return t.tensor(instruction_toks).unsqueeze(0)
-
-def generate_save_vectors(label: str, data_path: str, layers: List[int], save_activations: bool):
-    """
-    layers: list of layers to generate vectors for
-    save_activations: if True, save the activations for each layer
-    """
-    if not os.path.exists(SAVE_VECTORS_PATH):
-        os.makedirs(SAVE_VECTORS_PATH)
-    if save_activations and not os.path.exists(SAVE_ACTIVATIONS_PATH):
-        os.makedirs(SAVE_ACTIVATIONS_PATH)
+def generate_save_vectors(label: str, data_path: str, data_type: str, layers: List[int], vectors_dir: str, activations_dir: str, save_activations: bool):
+    if not os.path.exists(vectors_dir):
+        os.makedirs(vectors_dir)
+    if save_activations and not os.path.exists(activations_dir):
+        os.makedirs(activations_dir)
 
     model = LlamaWrapper(SYSTEM_PROMPT)
     model.set_save_internal_decodings(False)
@@ -65,11 +35,20 @@ def generate_save_vectors(label: str, data_path: str, layers: List[int], save_ac
     pos_activations = dict([(layer, []) for layer in layers])
     neg_activations = dict([(layer, []) for layer in layers])
 
-    dataset = InstructionComparisonDataset(
-        data_path,
-        SYSTEM_PROMPT,
-        model.tokenizer,
-    )
+    if data_type == "instruction":
+        dataset = InstructionComparisonDataset(
+            data_path,
+            SYSTEM_PROMPT,
+            model.tokenizer,
+        )
+    elif data_type == "instruction_answer":
+        dataset = InstructionAnswerComparisonDataset(
+            data_path,
+            SYSTEM_PROMPT,
+            model.tokenizer,
+        )
+    else:
+        raise ValueError(f"Invalid data type {data_type}. Must be 'instruction' or 'instruction_answer'.")
 
     for p_tokens, n_tokens in tqdm(dataset, desc="Processing prompts"):
         p_tokens = p_tokens.to(model.device)
@@ -94,7 +73,7 @@ def generate_save_vectors(label: str, data_path: str, layers: List[int], save_ac
         t.save(
             vec,
             os.path.join(
-                SAVE_VECTORS_PATH,
+                vectors_dir,
                 f"vec_layer_{make_tensor_save_suffix(layer, label)}.pt",
             ),
         )
@@ -102,14 +81,14 @@ def generate_save_vectors(label: str, data_path: str, layers: List[int], save_ac
             t.save(
                 all_pos_layer,
                 os.path.join(
-                    SAVE_ACTIVATIONS_PATH,
+                    activations_dir,
                     f"activations_pos_{make_tensor_save_suffix(layer, label)}.pt",
                 ),
             )
             t.save(
                 all_neg_layer,
                 os.path.join(
-                    SAVE_ACTIVATIONS_PATH,
+                    activations_dir,
                     f"activations_neg_{make_tensor_save_suffix(layer, label)}.pt",
                 ),
             )
@@ -120,9 +99,14 @@ def make_tensor_save_suffix(layer, label):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", type=str, default=DEFAULT_LABEL)
-    parser.add_argument("--data_path", type=str, default=DEFAILT_DATASET_PATH)
+    parser.add_argument("--data_path", type=str, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--data_type", type=str, default="instruction")
     parser.add_argument("--layers", nargs="+", type=int, default=list(range(32)))
-    parser.add_argument("--save_activations", action="store_true", default=False)
+    parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
+    parser.add_argument("--activations_dir", type=str, default=DEFAULT_ACTIVATIONS_DIR)
+    parser.add_argument("--save_activations", action='store_true', default=False)
 
     args = parser.parse_args()
-    generate_save_vectors(args.label, args.data_path, args.layers, args.save_activations)
+    generate_save_vectors(
+        args.label, args.data_path, args.data_type, args.layers, args.vectors_dir, args.activations_dir, args.save_activations
+    )

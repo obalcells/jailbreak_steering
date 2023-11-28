@@ -1,3 +1,4 @@
+import argparse
 import os
 import json
 import time
@@ -11,20 +12,20 @@ from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
 from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
 
-MODEL_PATH = "meta-llama/Llama-2-7b-chat-hf"
-DATASET_PATH = "datasets/advbench/harmful_behaviors_train.csv"
-LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-ALL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "all_results.json")
-SUCCESSFUL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "successful_results.json")
+DEFAULT_DATASET_PATH = "datasets/uprocessed/advbench/harmful_behaviors_train.csv"
+DEFAULT_SUFFIX_GEN_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+DEFAULT_SUFFIX_GEN_RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+ALL_SUFFIX_GEN_RESULTS_FILENAME = "all_results.json"
+SUCCESSFUL_SUFFIX_GEN_RESULTS_FILENAME = "successful_results.json"
 
 N_INSTRUCTIONS = 10 # change to 'None' to run on all instructions
 
 def get_config():
     return {
         'system_prompt': None,
-        'n_steps': 150,
+        'n_steps': 300,
         'batch_size': 256,
-        'topk': 128,
+        'topk': 64,
         'early_stop_threshold': 0.04,
         'success_threshold': 0.1,
         'reuse_control': True,
@@ -74,7 +75,7 @@ def evaluate_generation(
 
     return generation
 
-def generate_suffix(model, tokenizer, instruction, target, control_init, config):
+def generate_suffix(model, tokenizer, instruction, target, control_init, config, logs_dir):
     suffix_gen = SuffixGen(
         model,
         tokenizer,
@@ -84,7 +85,7 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config)
         early_stop_threshold=config['early_stop_threshold'],
         system_prompt=config['system_prompt'],
         verbose=config['verbose'],
-        logs_dir=LOGS_DIR,
+        logs_dir=logs_dir,
     )
 
     start = time.time()
@@ -103,20 +104,18 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config)
 
     return control_str, runtime, loss, steps, gen_str, success
 
-def save_results(all_results, successful_results):
-    if not os.path.exists(os.path.dirname(ALL_RESULTS_PATH)):
-        os.makedirs(os.path.dirname(ALL_RESULTS_PATH))
+def save_results(results, results_dir, filename):
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
 
-    with open(ALL_RESULTS_PATH, "w") as file:
-        json.dump(all_results, file, indent=4)
-    with open(SUCCESSFUL_RESULTS_PATH, "w") as file:
-        json.dump(successful_results, file, indent=4)
+    with open(os.path.join(results_dir, filename), "w") as file:
+        json.dump(results, file, indent=4)
 
-def main():
+def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str):
     model = load_llama_2_7b_chat_model()
     tokenizer = load_llama_2_7b_chat_tokenizer()
 
-    instructions, targets = load_dataset(DATASET_PATH, n=N_INSTRUCTIONS)
+    instructions, targets = load_dataset(dataset_path, n=N_INSTRUCTIONS)
     config = get_config()
 
     np.random.seed(42)
@@ -129,7 +128,7 @@ def main():
 
     for instruction, target in zip(instructions, targets):
         control_str, runtime, loss, steps, gen_str, success = generate_suffix(
-            model, tokenizer, instruction, target, control_init, config
+            model, tokenizer, instruction, target, control_init, config, logs_dir
         )
 
         print(f"************************************")
@@ -149,11 +148,11 @@ def main():
         }
 
         all_results.append(result)
+        save_results(all_results, results_dir, ALL_SUFFIX_GEN_RESULTS_FILENAME)
 
         if success:
             successful_results.append(result)
-
-        save_results(all_results, successful_results)
+            save_results(successful_results, results_dir, SUCCESSFUL_SUFFIX_GEN_RESULTS_FILENAME)
 
         if config['reuse_control'] and success and len(all_results) % config['reset_control_after'] != 0:
             control_init = control_str
@@ -161,4 +160,11 @@ def main():
             control_init = config['default_control_init']
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--results_dir", type=str, default=DEFAULT_SUFFIX_GEN_RESULTS_DIR)
+    parser.add_argument("--logs_dir", type=str, default=DEFAULT_SUFFIX_GEN_LOGS_DIR)
+
+    args = parser.parse_args()
+
+    run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir)
