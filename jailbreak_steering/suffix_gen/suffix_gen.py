@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import time
 import os
-import gc
 import json
 import time
+import einops
 
 from torch import Tensor
 from jaxtyping import Int, Float
@@ -27,6 +27,7 @@ class SuffixGen():
         allow_nonascii: bool=False,
         verbose: bool=False,
         logs_dir: Optional[str]=None,
+        use_cache: bool=True,
     ):
         self.instruction = instruction
         self.target = target
@@ -50,12 +51,15 @@ class SuffixGen():
         self.log_path = os.path.join(logs_dir, f'suffix_gen_{time.strftime("%Y%m%d-%H:%M:%S")}.json')
         self.log = self._initialize_log()
 
-    def run(
-        self, 
-        max_steps: int, 
-        batch_size: int, 
-        topk: int,
-    ):
+        self.use_cache = use_cache
+        if self.use_cache:
+            self.past_key_values = self.model(
+                self.prompt.input_ids[:self.prompt._instruction_slice.stop].unsqueeze(0),
+                use_cache=True,
+            ).past_key_values
+
+    def run(self, max_steps: int, batch_size: int, topk: int):
+
         self._initialize_run_log(batch_size, topk)
 
         best_loss = float('inf')
@@ -81,43 +85,22 @@ class SuffixGen():
         self._save_logs(self.log)
         return best_control, best_loss, step
 
-    def step(
-        self,
-        batch_size: int,
-        topk: int,
-    ):
-        start_total = time.time()
-        start = time.time()
+    def step(self, batch_size: int, topk: int):
 
         # 1. Compute gradients of target loss with respect to each control token
         control_tok_grads = self.compute_control_token_gradients()
-
-        print(f'1: {time.time() - start:.5f}'); start = time.time()
 
         # 2. Get candidate control token modifications
         with torch.no_grad():
             sampled_control_cands_toks = self.sample_control_candidates(control_tok_grads, batch_size, topk, curr_control_toks=self.prompt.control_toks)
         control_cands, control_cands_toks = self.filter_cand_controls(sampled_control_cands_toks, curr_control=self.prompt.control_str)
-        
-        print(f'2: {time.time() - start:.5f}'); start = time.time()
 
-        # 3. Evaluate each control token modification's target loss , pick the best one
+        # 3. Evaluate each control token modification's target loss, pick the best one
         with torch.no_grad():
-            losses = self.evaluate_control_cand_losses(control_cands_toks)
-
-            print(f'3: {time.time() - start:.5f}'); start = time.time()
-
-        # 4. Pick the best control token modification
-        losses = losses.detach().cpu()
+            losses = self.evaluate_control_cand_losses(control_cands_toks).detach().cpu()
         min_idx = losses.argmin()
 
-        print(f'4: {time.time() - start:.5f}'); start = time.time() 
-        
-        # 5. Set the next control string
         next_control, cand_loss = control_cands[min_idx], losses[min_idx].item()
-        
-        print(f'5: {time.time() - start:.5f}'); start = time.time()  
-        print(f'total: {time.time() - start_total:.5f}')
 
         return next_control, cand_loss
 
@@ -139,6 +122,7 @@ class SuffixGen():
         control_toks_one_hot = torch.zeros(suffix_len, d_vocab, dtype=embed_weights.dtype, device=self.model.device)
         control_toks_one_hot.scatter_(1, input_ids[control_slice].unsqueeze(1), 1)
         control_toks_one_hot.requires_grad_()
+
         # Weave the grad-enabled control embeddings in with the other embeddings
         input_embeds = self.model.model.embed_tokens(input_ids.unsqueeze(0)).detach()
         control_embeds = (control_toks_one_hot @ embed_weights).unsqueeze(0)
@@ -194,7 +178,7 @@ class SuffixGen():
             device=self.model.device
         ).type(torch.int64)
 
-        # sample random indices in a way that minimizes resampling of the same token
+        # Sample random indices in a way that minimizes resampling of the same token
         rand_indices = torch.randperm(topk, device=self.model.device).repeat(batch_size // topk + 1)[:batch_size].unsqueeze(1)
 
         new_token_val = torch.gather(
@@ -242,15 +226,44 @@ class SuffixGen():
         cands_input_ids = self.prompt.input_ids.repeat(control_cands_toks.shape[0], 1)
         cands_input_ids[:, self.prompt._control_slice] = control_cands_toks
 
-        logits = self.model(cands_input_ids).logits
+        if self.use_cache:
+            cache_offset = self.prompt._instruction_slice.stop
+            past_key_values = self.prepare_past_key_values(batch_size=cands_input_ids.shape[0])
+        else:
+            cache_offset = 0
+            past_key_values = None
 
+        start = torch.cuda.Event(enable_timing=True); end = torch.cuda.Event(enable_timing=True); start.record()
+        logits = self.model(
+            cands_input_ids[:, cache_offset:],
+            use_cache=self.use_cache,
+            past_key_values=past_key_values
+        ).logits
+        end.record(); torch.cuda.synchronize(); print(f'model.fwd: {start.elapsed_time(end):.5f}')
+
+        start = torch.cuda.Event(enable_timing=True); end = torch.cuda.Event(enable_timing=True); start.record()
         loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
         losses = loss_fn(
-            logits[:,self.prompt._loss_slice,:].transpose(1,2), # batch_size loss_slice d_vocab -> batch_size d_vocab loss_slice
-            cands_input_ids[:,self.prompt._target_slice] # batch_size loss_slice
+            logits[:,self.prompt._loss_slice.start - cache_offset : self.prompt._loss_slice.stop - cache_offset,:].transpose(1,2), # batch_size loss_slice d_vocab -> batch_size d_vocab loss_slice
+            cands_input_ids[:, self.prompt._target_slice] # batch_size loss_slice
         ).mean(dim=-1)
+        end.record(); torch.cuda.synchronize(); print(f'loss_fn: {start.elapsed_time(end):.5f}')
 
         return losses
+
+    def prepare_past_key_values(self, batch_size: int) -> Tuple[Tuple[Float[Tensor, "batch_size n_head seq_len d_head"]]]:
+        past_key_values = [
+            [
+                einops.repeat(
+                    kv[0, :, :, :],
+                    'n_head seq_len d_head -> batch_size n_head seq_len d_head',
+                    batch_size=batch_size
+                )
+                for kv in layer
+            ]
+            for layer in self.past_key_values
+        ]
+        return tuple(map(tuple, past_key_values))
 
     def _initialize_log(self):
         log = {"instruction": self.instruction, "target": self.target, "system_prompt": self.system_prompt}
