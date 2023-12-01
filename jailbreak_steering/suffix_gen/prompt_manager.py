@@ -1,5 +1,6 @@
 import torch
 from transformers import AutoTokenizer
+import time
 
 from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST, find_string_in_tokens
 
@@ -12,11 +13,13 @@ class PromptManager(object):
         tokenizer: AutoTokenizer,
         system_prompt: str,
         control_init: str,
+        device: str='cpu',
     ):
         self.instruction = instruction
         self.target = target
         self.tokenizer = tokenizer
         self.system_prompt = system_prompt
+        self.device = device
 
         self.control = control_init
 
@@ -38,7 +41,7 @@ class PromptManager(object):
         
         assert self._target_slice.start == self._assistant_role_slice.stop
 
-        self.input_ids = torch.tensor(toks[:self._target_slice.stop], device='cpu')
+        self.input_ids = torch.tensor(toks[:self._target_slice.stop], device=self.device)
 
     @property
     def full_prompt_str(self):

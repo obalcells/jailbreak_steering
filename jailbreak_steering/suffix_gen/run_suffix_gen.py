@@ -1,3 +1,4 @@
+# %%
 import argparse
 import os
 import json
@@ -103,10 +104,10 @@ def save_results(results, results_dir, filename):
     with open(os.path.join(results_dir, filename), "w") as file:
         json.dump(results, file, indent=4)
 
-def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str):
-    model = load_llama_2_7b_chat_model()
-    tokenizer = load_llama_2_7b_chat_tokenizer()
+model = load_llama_2_7b_chat_model()
+tokenizer = load_llama_2_7b_chat_tokenizer()
 
+def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str):
     instructions, targets = load_dataset(dataset_path, n=N_INSTRUCTIONS)
     config = load_config(config_path)
     default_control_init = ' '.join(['!' for _ in range(config['control_len'])])
@@ -152,13 +153,18 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
         else:
             control_init = default_control_init
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
-    parser.add_argument("--results_dir", type=str, default=DEFAULT_SUFFIX_GEN_RESULTS_DIR)
-    parser.add_argument("--logs_dir", type=str, default=DEFAULT_SUFFIX_GEN_LOGS_DIR)
-    parser.add_argument("--config_path", type=str, default=DEFAULT_SUFFIX_GEN_CONFIG_PATH)
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
+#     parser.add_argument("--results_dir", type=str, default=DEFAULT_SUFFIX_GEN_RESULTS_DIR)
+#     parser.add_argument("--logs_dir", type=str, default=DEFAULT_SUFFIX_GEN_LOGS_DIR)
+#     parser.add_argument("--config_path", type=str, default=DEFAULT_SUFFIX_GEN_CONFIG_PATH)
 
-    args = parser.parse_args()
+#     args = parser.parse_args()
 
-    run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir, args.config_path)
+#     run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir, args.config_path)
+
+# %%
+
+run_suffix_gen(DEFAULT_DATASET_PATH, DEFAULT_SUFFIX_GEN_RESULTS_DIR, DEFAULT_SUFFIX_GEN_LOGS_DIR, DEFAULT_SUFFIX_GEN_CONFIG_PATH)
+# %%

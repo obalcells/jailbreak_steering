@@ -4,6 +4,7 @@ import time
 import os
 import gc
 import json
+import time
 
 from torch import Tensor
 from jaxtyping import Int, Float
@@ -35,14 +36,15 @@ class SuffixGen():
         self.early_stop_threshold = early_stop_threshold
         self.verbose = verbose
         self.allow_nonascii = allow_nonascii
-        self._nonascii_toks = get_nonascii_toks(self.tokenizer)
+        self._nonascii_toks = get_nonascii_toks(self.tokenizer).to(self.model.device)
 
         self.prompt = PromptManager(
             instruction,
             target,
             tokenizer,
             system_prompt,
-            control_init
+            control_init,
+            device=self.model.device,
         )
 
         self.log_path = os.path.join(logs_dir, f'suffix_gen_{time.strftime("%Y%m%d-%H:%M:%S")}.json')
@@ -84,26 +86,45 @@ class SuffixGen():
         batch_size: int,
         topk: int,
     ):
+        start_total = time.time()
+        start = time.time()
+
         # 1. Compute gradients of target loss with respect to each control token
         control_tok_grads = self.compute_control_token_gradients()
+
+        print(f'1: {time.time() - start:.5f}'); start = time.time()
 
         # 2. Get candidate control token modifications
         with torch.no_grad():
             sampled_control_cands_toks = self.sample_control_candidates(control_tok_grads, batch_size, topk, curr_control_toks=self.prompt.control_toks)
-
         control_cands, control_cands_toks = self.filter_cand_controls(sampled_control_cands_toks, curr_control=self.prompt.control_str)
+        
+        print(f'2: {time.time() - start:.5f}'); start = time.time()
 
         # 3. Evaluate each control token modification's target loss , pick the best one
         with torch.no_grad():
             losses = self.evaluate_control_cand_losses(control_cands_toks)
+
+            print(f'3: {time.time() - start:.5f}'); start = time.time()
+
+        # 4. Pick the best control token modification
+        losses = losses.detach().cpu()
         min_idx = losses.argmin()
-        next_control, cand_loss = control_cands[min_idx], losses[min_idx] 
-        return next_control, cand_loss.item()
+
+        print(f'4: {time.time() - start:.5f}'); start = time.time() 
+        
+        # 5. Set the next control string
+        next_control, cand_loss = control_cands[min_idx], losses[min_idx].item()
+        
+        print(f'5: {time.time() - start:.5f}'); start = time.time()  
+        print(f'total: {time.time() - start_total:.5f}')
+
+        return next_control, cand_loss
 
     # Computes the gradient of the target loss w.r.t. each control token one-hot vector
     def compute_control_token_gradients(self) -> Float[Tensor, "suffix_len d_vocab"]:
 
-        input_ids = self.prompt.input_ids.to(self.model.device)
+        input_ids = self.prompt.input_ids
         control_slice = self.prompt._control_slice
         target_slice = self.prompt._target_slice
         loss_slice = self.prompt._loss_slice
@@ -115,10 +136,9 @@ class SuffixGen():
 
         # Create one-hot vector for control tokens.
         # We need to compute the gradient of loss w.r.t. these one-hot vectors
-        control_toks_one_hot = torch.zeros(suffix_len, d_vocab, device=self.model.device, dtype=embed_weights.dtype)
+        control_toks_one_hot = torch.zeros(suffix_len, d_vocab, dtype=embed_weights.dtype, device=self.model.device)
         control_toks_one_hot.scatter_(1, input_ids[control_slice].unsqueeze(1), 1)
         control_toks_one_hot.requires_grad_()
-        
         # Weave the grad-enabled control embeddings in with the other embeddings
         input_embeds = self.model.model.embed_tokens(input_ids.unsqueeze(0)).detach()
         control_embeds = (control_toks_one_hot @ embed_weights).unsqueeze(0)
@@ -142,7 +162,6 @@ class SuffixGen():
 
         # Clean up
         self.model.zero_grad()
-        gc.collect()
 
         return grad
 
@@ -162,21 +181,21 @@ class SuffixGen():
             control_tok_grads[:, self._nonascii_toks] = float('inf')
 
         # prevent resampling of current control tokens
-        control_tok_grads[torch.arange(0, control_tok_grads.shape[0]), curr_control_toks] = float('inf')
+        control_tok_grads[torch.arange(0, control_tok_grads.shape[0], device=self.model.device), curr_control_toks] = float('inf')
 
         _, topk_indices = (-control_tok_grads).topk(topk, dim=1)
 
-        original_control_toks = curr_control_toks.repeat(batch_size, 1).to(control_tok_grads.device)
+        original_control_toks = curr_control_toks.repeat(batch_size, 1).to(self.model.device)
 
         new_token_pos = torch.arange(
             0,
             suffix_len,
             suffix_len / batch_size,
-            device=control_tok_grads.device
+            device=self.model.device
         ).type(torch.int64)
 
         # sample random indices in a way that minimizes resampling of the same token
-        rand_indices = torch.randperm(topk, device=control_tok_grads.device).repeat(batch_size // topk + 1)[:batch_size].unsqueeze(1)
+        rand_indices = torch.randperm(topk, device=self.model.device).repeat(batch_size // topk + 1)[:batch_size].unsqueeze(1)
 
         new_token_val = torch.gather(
             topk_indices[new_token_pos], 1, 
@@ -203,8 +222,7 @@ class SuffixGen():
         ).input_ids
 
         valid_cand_idxs = []
-        filtered_curr_control = 0
-        filtered_len = 0
+
         for i in range(control_cand.shape[0]):
             if decoded_cands[i] != curr_control and len(re_encoded_cands[i]) == len(control_cand[i]):
                 valid_cand_idxs.append(i)
@@ -214,25 +232,24 @@ class SuffixGen():
 
         if len(cands) == 0:
             cands.append(curr_control)
-            cands_toks.append(torch.tensor(self.tokenizer(curr_control, add_special_tokens=False).input_ids).to(control_cand.device))
+            cands_toks.append(torch.tensor(self.tokenizer(curr_control, add_special_tokens=False).input_ids).to(self.model.device))
 
         cands_toks = torch.stack(cands_toks, dim=0)
-        
+
         return cands, cands_toks
-    
-    def evaluate_control_cand_losses(
-        self,
-        control_cands_toks: Int[Tensor, "batch_size suffix_len"]
-    ):
+
+    def evaluate_control_cand_losses(self, control_cands_toks: Int[Tensor, "batch_size suffix_len"]):
         cands_input_ids = self.prompt.input_ids.repeat(control_cands_toks.shape[0], 1)
         cands_input_ids[:, self.prompt._control_slice] = control_cands_toks
-        logits = self.model(cands_input_ids.to(self.model.device)).logits
 
-        crit = torch.nn.CrossEntropyLoss(reduction='none')
-        losses = crit(
-            logits[:,self.prompt._loss_slice,:].transpose(1,2),
-            cands_input_ids[:,self.prompt._target_slice].to(self.model.device)
+        logits = self.model(cands_input_ids).logits
+
+        loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
+        losses = loss_fn(
+            logits[:,self.prompt._loss_slice,:].transpose(1,2), # batch_size loss_slice d_vocab -> batch_size d_vocab loss_slice
+            cands_input_ids[:,self.prompt._target_slice] # batch_size loss_slice
         ).mean(dim=-1)
+
         return losses
 
     def _initialize_log(self):
