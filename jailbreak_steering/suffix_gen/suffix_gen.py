@@ -13,6 +13,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 
+LOG_FLUSH_INTERVAL = 10
+
 class SuffixGen():
 
     def __init__(
@@ -23,21 +25,17 @@ class SuffixGen():
         target: str,
         control_init: str,
         system_prompt: Optional[str],
+        topk: int,
+        batch_size: int,
+        max_steps: int,
         early_stop_threshold: float,
         allow_nonascii: bool=False,
         verbose: bool=False,
         logs_dir: Optional[str]=None,
         use_cache: bool=True,
     ):
-        self.instruction = instruction
-        self.target = target
         self.model = model
         self.tokenizer = tokenizer
-        self.system_prompt = system_prompt
-        self.early_stop_threshold = early_stop_threshold
-        self.verbose = verbose
-        self.allow_nonascii = allow_nonascii
-        self._nonascii_toks = get_nonascii_toks(self.tokenizer).to(self.model.device)
 
         self.prompt = PromptManager(
             instruction,
@@ -45,11 +43,21 @@ class SuffixGen():
             tokenizer,
             system_prompt,
             control_init,
-            device=self.model.device,
+            device=model.device,
         )
 
-        self.log_path = os.path.join(logs_dir, f'suffix_gen_{time.strftime("%Y%m%d-%H:%M:%S")}.json')
-        self.log = self._initialize_log()
+        self.topk = topk
+        self.batch_size = batch_size
+        self.max_steps = max_steps
+
+        self.early_stop_threshold = early_stop_threshold
+        self.verbose = verbose
+
+        self.allow_nonascii = allow_nonascii
+        if not self.allow_nonascii:
+            self._nonascii_toks = get_nonascii_toks(self.tokenizer, self.model.device)
+
+        self.log_path = os.path.join(logs_dir, f'{time.strftime("%Y%m%d-%H:%M:%S")}.json')
 
         self.use_cache = use_cache
         if self.use_cache:
@@ -58,32 +66,29 @@ class SuffixGen():
                 use_cache=True,
             ).past_key_values
 
-    def run(self, max_steps: int, batch_size: int, topk: int):
-
-        self._initialize_run_log(batch_size, topk)
+    def run(self):
+        self._initialize_log()
 
         best_loss = float('inf')
         best_control = self.prompt.control_str
 
-        for step in range(max_steps):
-            start = time.time()
+        for n_step in range(self.max_steps):
 
-            control, loss = self.step(batch_size=batch_size, topk=topk)
+            control, loss = self.step(batch_size=self.batch_size, topk=self.topk)
             self.prompt.control_str = control
 
-            self._log_step(step, control, loss, time.time() - start)
+            self._log_step(n_step, control, loss)
 
             if loss < best_loss:
-                best_loss = loss
-                best_control = control
+                best_loss, best_control = loss, control
             if loss < self.early_stop_threshold:
                 break
 
-            if (step+1) % 10 == 0:
-                self._save_logs(self.log)
+            if (n_step+1) % LOG_FLUSH_INTERVAL == 0:
+                self._save_log()
 
-        self._save_logs(self.log)
-        return best_control, best_loss, step
+        self._save_log()
+        return best_control, best_loss, n_step
 
     def step(self, batch_size: int, topk: int):
 
@@ -233,21 +238,17 @@ class SuffixGen():
             cache_offset = 0
             past_key_values = None
 
-        start = torch.cuda.Event(enable_timing=True); end = torch.cuda.Event(enable_timing=True); start.record()
         logits = self.model(
             cands_input_ids[:, cache_offset:],
             use_cache=self.use_cache,
             past_key_values=past_key_values
         ).logits
-        end.record(); torch.cuda.synchronize(); print(f'model.fwd: {start.elapsed_time(end):.5f}')
 
-        start = torch.cuda.Event(enable_timing=True); end = torch.cuda.Event(enable_timing=True); start.record()
         loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
         losses = loss_fn(
             logits[:,self.prompt._loss_slice.start - cache_offset : self.prompt._loss_slice.stop - cache_offset,:].transpose(1,2), # batch_size loss_slice d_vocab -> batch_size d_vocab loss_slice
             cands_input_ids[:, self.prompt._target_slice] # batch_size loss_slice
         ).mean(dim=-1)
-        end.record(); torch.cuda.synchronize(); print(f'loss_fn: {start.elapsed_time(end):.5f}')
 
         return losses
 
@@ -265,47 +266,59 @@ class SuffixGen():
         ]
         return tuple(map(tuple, past_key_values))
 
-    def _initialize_log(self):
-        log = {"instruction": self.instruction, "target": self.target, "system_prompt": self.system_prompt}
-        self._save_logs(log)
-        return log
-
-    def _save_logs(self, log):
+    def _save_log(self):
         log_dir_path = os.path.dirname(self.log_path)
         if not os.path.exists(log_dir_path):
             os.makedirs(log_dir_path)
         with open(self.log_path, "w") as file:
-            json.dump(log, file, indent=4)
+            json.dump(self.log, file, indent=4)
 
-    def _log_step(self, step, control, loss, step_runtime):
+    def _initialize_log(self):
+        self.log = {
+            "instruction": self.prompt.instruction,
+            "target": self.prompt.target,
+            "system_prompt": self.prompt.system_prompt,
+            "control_init": self.prompt.control_str,
+            "batch_size": self.batch_size,
+            "topk": self.topk,
+            "steps": [],
+            "use_cache": self.use_cache,
+            "allow_nonascii": self.allow_nonascii,
+            "start_time": time.time(),
+        }
+
+    def _finalize_log(self, best_control: str, best_loss: float):
+        self.log["best_control"] = best_control
+        self.log["best_loss"] = best_loss
+        self.log["runtime"] = time.time() - self.log["start_time"]
+        self.log["n_steps"] = len(self.log["steps"])
+
+    def _log_step(self, n_step: int, control: str, loss: float):
+        step = {
+            "n_step": n_step,
+            "control": control,
+            "loss": float(f"{loss:.5f}"),
+            "time": float(f"{time.time():.5f}"),
+        }
         if self.verbose:
-            self._print_step_info(step, control, loss, step_runtime)
-        self._update_log(step, control, loss, step_runtime)
+            print(step)
+        self.log["steps"].append(step)
 
-    def _print_step_info(self, step, control, loss, step_runtime):
-        control_length = len(self.tokenizer(control, add_special_tokens=False).input_ids)
-        print(f'Current length: {control_length}, Control str: {control}')
-        print(f'Step: {step}, Current Loss: {loss:.5f}, Last runtime: {step_runtime:.5f}')
-        print(" ", flush=True)
+    # def _print_step_info(self, step, control, loss, step_runtime):
+    #     control_length = len(self.tokenizer(control, add_special_tokens=False).input_ids)
+    #     print(f'Current length: {control_length}, Control str: {control}')
+    #     print(f'Step: {step}, Current Loss: {loss:.5f}, Last runtime: {step_runtime:.5f}')
+    #     print(" ", flush=True)
 
-    def _initialize_run_log(self, batch_size, topk):
-        self.log.update({
-            "n_steps": -1,
-            "batch_size": batch_size,
-            "topk": topk,
-            "control_strs": [],
-            "losses": [],
-            "runtime": 0,
-        })
 
-    def _update_log(self, step, control, loss, step_runtime):
-        self.log["control_str"] = control
-        self.log["control_strs"].append(control)
-        self.log["n_steps"] = step
-        self.log["losses"].append(loss)
-        self.log["runtime"] += step_runtime
+    # def _update_log(self, step, control, loss, step_runtime):
+    #     self.log["control_str"] = control
+    #     self.log["control_strs"].append(control)
+    #     self.log["n_steps"] = step
+    #     self.log["losses"].append(loss)
+    #     self.log["runtime"] += step_runtime
 
-def get_nonascii_toks(tokenizer, device='cpu'):
+def get_nonascii_toks(tokenizer, device):
     def is_ascii(s):
         return s.isascii() and s.isprintable()
 

@@ -15,11 +15,9 @@ from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load
 DEFAULT_DATASET_PATH = "datasets/unprocessed/advbench/harmful_behaviors_train.csv"
 DEFAULT_SUFFIX_GEN_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 DEFAULT_SUFFIX_GEN_RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
-DEFAULT_SUFFIX_GEN_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "suffix_gen_config.json")
+DEFAULT_SUFFIX_GEN_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs", "suffix_gen_config.json")
 ALL_SUFFIX_GEN_RESULTS_FILENAME = "all_results.json"
 SUCCESSFUL_SUFFIX_GEN_RESULTS_FILENAME = "successful_results.json"
-
-N_INSTRUCTIONS = 10 # change to 'None' to run on all instructions
 
 def load_config(config_file):
     with open(config_file, 'r') as file:
@@ -74,6 +72,9 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config,
         instruction,
         target,
         control_init=control_init,
+        topk=config['topk'],
+        batch_size=config['batch_size'],
+        max_steps=config['max_steps'],
         early_stop_threshold=config['early_stop_threshold'],
         system_prompt=config['system_prompt'],
         verbose=config['verbose'],
@@ -83,11 +84,7 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config,
 
     start = time.time()
 
-    control_str, _, steps = suffix_gen.run(
-        max_steps=config['max_steps'],
-        batch_size=config['batch_size'],
-        topk=config['topk'],
-    )
+    control_str, _, steps = suffix_gen.run()
 
     runtime = time.time() - start
     loss = evaluate_target_loss(model, suffix_gen.prompt).item()
@@ -109,7 +106,7 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
     model = load_llama_2_7b_chat_model()
     tokenizer = load_llama_2_7b_chat_tokenizer()
 
-    instructions, targets = load_dataset(dataset_path, n=N_INSTRUCTIONS)
+    instructions, targets = load_dataset(dataset_path, n=None)
     config = load_config(config_path)
     default_control_init = ' '.join(['!' for _ in range(config['control_len'])])
  
