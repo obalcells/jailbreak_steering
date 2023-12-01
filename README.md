@@ -27,7 +27,8 @@ To run this step on a dataset of instructions:
 python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
     --dataset_path <path_to_dataset> \
     --results_dir <path_to_results_dir> \
-    --logs_dir <path_to_logs_dir>
+    --logs_dir <path_to_logs_dir> \
+    --config_path <path_to_config>
 ```
 
 - `dataset_path` is points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).

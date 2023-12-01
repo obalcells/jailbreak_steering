@@ -28,7 +28,7 @@ def load_llama_2_7b_chat_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(
         LLAMA_2_7B_CHAT_MODEL_PATH,
         token=huggingface_token,
-        use_fast=False
+        use_fast=True
     )
     tokenizer.pad_token = "[PAD]"
     tokenizer.padding_side = "left"

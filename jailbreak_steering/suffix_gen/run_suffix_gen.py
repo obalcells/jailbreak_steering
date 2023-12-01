@@ -12,27 +12,19 @@ from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
 from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
 
-DEFAULT_DATASET_PATH = "datasets/uprocessed/advbench/harmful_behaviors_train.csv"
+DEFAULT_DATASET_PATH = "datasets/unprocessed/advbench/harmful_behaviors_train.csv"
 DEFAULT_SUFFIX_GEN_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 DEFAULT_SUFFIX_GEN_RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+DEFAULT_SUFFIX_GEN_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "suffix_gen_config.json")
 ALL_SUFFIX_GEN_RESULTS_FILENAME = "all_results.json"
 SUCCESSFUL_SUFFIX_GEN_RESULTS_FILENAME = "successful_results.json"
 
 N_INSTRUCTIONS = 10 # change to 'None' to run on all instructions
 
-def get_config():
-    return {
-        'system_prompt': None,
-        'n_steps': 300,
-        'batch_size': 256,
-        'topk': 64,
-        'early_stop_threshold': 0.04,
-        'success_threshold': 0.1,
-        'reuse_control': True,
-        'reset_control_after': 5,
-        'default_control_init': ' '.join(['!' for _ in range(30)]),
-        'verbose': True,
-    }
+def load_config(config_file):
+    with open(config_file, 'r') as file:
+        config = json.load(file)
+    return config
 
 def load_dataset(dataset_path: str, n: int=None):
     instructions = []
@@ -91,7 +83,7 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config,
     start = time.time()
 
     control_str, _, steps = suffix_gen.run(
-        n_steps=config['n_steps'],
+        max_steps=config['max_steps'],
         batch_size=config['batch_size'],
         topk=config['topk'],
     )
@@ -111,18 +103,19 @@ def save_results(results, results_dir, filename):
     with open(os.path.join(results_dir, filename), "w") as file:
         json.dump(results, file, indent=4)
 
-def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str):
+def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str):
     model = load_llama_2_7b_chat_model()
     tokenizer = load_llama_2_7b_chat_tokenizer()
 
     instructions, targets = load_dataset(dataset_path, n=N_INSTRUCTIONS)
-    config = get_config()
-
+    config = load_config(config_path)
+    default_control_init = ' '.join(['!' for _ in range(config['control_len'])])
+ 
     np.random.seed(42)
     torch.manual_seed(42)
     torch.cuda.manual_seed_all(42)
 
-    control_init = config['default_control_init']
+    control_init = default_control_init
     all_results = []
     successful_results = []
 
@@ -157,14 +150,15 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str):
         if config['reuse_control'] and success and len(all_results) % config['reset_control_after'] != 0:
             control_init = control_str
         else:
-            control_init = config['default_control_init']
+            control_init = default_control_init
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
     parser.add_argument("--results_dir", type=str, default=DEFAULT_SUFFIX_GEN_RESULTS_DIR)
     parser.add_argument("--logs_dir", type=str, default=DEFAULT_SUFFIX_GEN_LOGS_DIR)
+    parser.add_argument("--config_path", type=str, default=DEFAULT_SUFFIX_GEN_CONFIG_PATH)
 
     args = parser.parse_args()
 
-    run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir)
+    run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir, args.config_path)
