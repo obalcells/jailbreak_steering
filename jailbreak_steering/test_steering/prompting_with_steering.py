@@ -5,14 +5,15 @@ import numpy as np
 from datasets import load_dataset
 import tqdm
 from dataclasses import dataclass
+import torch as t
 
 from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_tokenizer
 from jailbreak_steering.utils.steering_settings import SteeringSettings
 
 from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
-from jailbreak_steering.suffix_gen.run_suffix_gen import DEFAULT_VECTORS_DIR
+from jailbreak_steering.suffix_gen.run_suffix_gen import make_tensor_save_suffix, DEFAULT_VECTORS_DIR, DEFAULT_LABEL, SYSTEM_PROMPT
 
-# TODO: Remove this 
+# TODO: Remove this (it's used to be able to pass a steering wrapper class as input)
 # import importlib
 # from steering_wrappers.add_vec_steering_wrapper import AddVecSteeringWrapper 
 # Function to import module at the runtime
@@ -21,8 +22,15 @@ from jailbreak_steering.suffix_gen.run_suffix_gen import DEFAULT_VECTORS_DIR
 
 # DEFAULT_STEERING_WRAPPER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "steering_wrappers/add_vec_steering_wrapper.py")
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "steered_generations")
-DEFAULT_HF_DATASET = "obalcells/advbench"
-SYSTEM_PROMPT = None
+DEFAULT_DATASET = "obalcells/advbench"
+
+def get_steering_vector(label, layer, vectors_dir):
+    return t.load(
+        os.path.join(
+            vectors_dir,
+            f"vec_layer_{make_tensor_save_suffix(layer, label)}.pt",
+        )
+    )
 
 def load_instructions_from_hf_dataset(
     hf_dataset: str,
@@ -86,18 +94,29 @@ def generate(
 
     return generations
 
-def run_local_steered_text_generation(steering_settings: SteeringSettings):
+def run_local_steered_text_generation(settings: SteeringSettings) -> Dict:
     model = LlamaWrapper(
-        SYSTEM_PROMPT,
-        size=steering_settings.model_size,
-        use_chat=not steering_settings.use_base_model,
-        add_only_after_end_str=not steering_settings.add_every_token_position,
-        override_model_weights_path=steering_settings.override_model_weights_path,
+        settings.system_prompt,
+        size=settings.model_size,
+        use_chat=not settings.use_base_model,
+        add_only_after_end_str=not settings.add_every_token_position,
+        override_model_weights_path=settings.override_model_weights_path,
     )
     model.set_save_internal_decodings(False)
 
-    hf_dataset = steering_settings.dataset
-    max_num_instructions = steering_settings.n_test_datapoints
+    for layer in settings.layers:
+        vector = get_steering_vector(layer, name_path)
+        vector = vector.to(model.device)
+
+        model.set_add_activations(
+            layer,
+            multiplier * vector,
+            do_projection=settings.do_projection,
+            normalize=settings.normalize
+        )
+
+    hf_dataset = settings.dataset
+    max_num_instructions = settings.n_test_datapoints
 
     instructions = load_instructions_from_hf_dataset(
         hf_dataset,
@@ -121,7 +140,7 @@ def run_local_steered_text_generation(steering_settings: SteeringSettings):
     )
 
     results = {
-        "steering_settings": steering_settings.get_settings_dict(),
+        "settings": settings.get_settings_dict(),
         "generations": []
     }
 
@@ -137,24 +156,26 @@ def run_local_steered_text_generation(steering_settings: SteeringSettings):
 if __name__ == "__main__":
     """
     python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
+        --layers <layers> \
+        --multipliers <multipliers> \
+        --label <steering_vector_label> \
         --vectors_dir <path_to_vectors_dir> \
-        # TODO: Fix this
-        # --steering_wrapper_path <path_to_model_wrapper_class> \
-        # parser.add_argument("--layers", nargs="+", type=int, required=True)
-        # parser.add_argument("--multipliers", nargs="+", type=float, required=True)
-        # parser.add_argument("--do_projection", action="store_true", default=False)
-        --system_prompt <system_prompt> \
-        --hf_dataset <hf_dataset_name> \
-        --max_new_tokens <number_of_generated_tokens_per_prompt> \
-        --run_in_modal <True/False> \
+        --hf_dataset_label <hf_dataset_label> \
         --output_dir <path_to_results_dir>
+        --run_locally <true_or_false> \
+        --do_projection <true_or_false> \
+        --normalize <true_or_false> \
+        --system_prompt <system_prompt_str> \
+        --max_new_tokens <number_tokens_generated_per_prompt> \
+        --n_test_datapoints <max_number_prompts>
     """
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--layers", nargs="+", type=int, required=True)
     parser.add_argument("--multipliers", nargs="+", type=float, required=True)
+    parser.add_argument("--label", type=str, default=DEFAULT_LABEL)
     parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
-    parser.add_argument("--hf_dataset", type=str, choices=["advbench"])
+    parser.add_argument("--hf_dataset_label", type=str, choices=["advbench"], default=DEFAULT_DATASET)
     parser.add_argument("--output_dir", type=str, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument('--run_locally', action='store_true', default=True)
     parser.add_argument("--do_projection", action="store_true", default=False)
@@ -165,7 +186,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    assert args.hf_dataset == "obalcells/advbench", "Only advbench dataset is supported for now"
+    assert args.hf_dataset == "advbench", "Only the advbench dataset is supported for now"
     assert args.run_locally == True, "Option to run in Modal not implemented yet"
 
     # attack_lib = dynamic_import(steering_wrapper_path)
@@ -181,9 +202,12 @@ if __name__ == "__main__":
     steering_settings.max_new_tokens = args.max_new_tokens
     steering_settings.n_test_datapoints = args.n_test_datapoints
     steering_settings.add_every_token_position = args.add_every_token_position
-    steering_settings.vectors_dir = args.vector_dir
+    steering_settings.vector_label = args.label
     
     results = run_local_steered_text_generation(steering_settings)
+
+    # we also store the arguments that we passed to the script
+    results["arguments"] = vars(args)
 
     results_suffix = steering_settings.make_result_save_suffix()
 

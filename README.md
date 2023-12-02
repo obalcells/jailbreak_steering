@@ -65,14 +65,16 @@ python3 -m jailbreak_steering.vector_gen.run_vector_gen \
 python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
     --layers <layers> \
     --multipliers <multipliers> \
+    --label <steering_vector_label> \
     --vectors_dir <path_to_vectors_dir> \
-    --hf_dataset <hf_dataset_name> \
+    --hf_dataset_label <hf_dataset_label> \
     --output_dir <path_to_results_dir>
+    --run_locally <true_or_false> \
     --do_projection <true_or_false> \
     --normalize <true_or_false> \
     --system_prompt <system_prompt_str> \
     --max_new_tokens <number_tokens_generated_per_prompt> \
-    --run_locally <true_or_false> \
+    --n_test_datapoints <max_number_prompts>
 ```
 
 ## Tests

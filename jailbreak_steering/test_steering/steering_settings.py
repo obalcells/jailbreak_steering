@@ -3,7 +3,7 @@ from typing import Optional
 import os
 
 from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
-from jailbreak_steering.suffix_gen.run_suffix_gen import DEFAULT_VECTORS_DIR
+from jailbreak_steering.suffix_gen.run_suffix_gen import DEFAULT_VECTORS_DIR, DEFAULT_VECTOR_LABEL
 
 @dataclass
 class SteeringSettings:
@@ -19,6 +19,13 @@ class SteeringSettings:
     n_test_datapoints: Number of datapoints to test on. If None, all datapoints will be used.
     add_every_token_position: Whether to add steering vector to every token position (including question), not only to token positions corresponding to the model's response to the user
     override_model_weights_path: If not None, the model weights at this path will be used instead of the model being used for generation - use to test using activation steering on top of fine-tuned model.
+
+    layers: Layers to use for steering.
+    multipliers: Multipliers to use for steering.
+    normalize: Whether to normalize the residual stream to its previous norm after adding the steering vector.
+    system_prompt: System prompt to use for generation. If None then no system prompt will be used.
+    dataset: The name of the dataset to use for generation. It's always an instruction dataset from HF. Either "advbench" or "alpaca" at the moment.
+    vector_label: The label of the steering vectors that will be used to steer.
     """
 
     max_new_tokens: int = 256 
@@ -38,7 +45,7 @@ class SteeringSettings:
     normalize: bool = True 
     system_prompt: str
     dataset: str = "advbench"
-    vectors_dir: str = ""
+    vector_label: str = DEFAULT_VECTOR_LABEL
 
     def make_result_save_suffix(self):
         # we don't want to save the system prompt in the suffix
@@ -63,9 +70,9 @@ class SteeringSettings:
             "do_projection": self.do_projection,
             "normalize": self.normalize,
             "max_new_tokens": self.max_new_tokens,
-            "n_prompts": self.n_test_datapoints,
+            "n_test_datapoints": self.n_test_datapoints,
             "add_every_token_position": self.add_every_token_position,
-            "system_prompt_type": system_prompt_short,
+            "system_prompt": system_prompt_short,
             "vectors_dir": vectors_dir_short
         }
 
@@ -99,9 +106,9 @@ class SteeringSettings:
             "do_projection": self.do_projection,
             "normalize": self.normalize,
             "max_new_tokens": self.max_new_tokens,
-            "n_prompts": self.n_test_datapoints,
+            "n_test_datapoints": self.n_test_datapoints,
             "add_every_token_position": self.add_every_token_position,
-            "system_prompt_type": system_prompt_short,
+            "system_prompt": system_prompt_short,
             "vectors_dir": vectors_dir_short
         }
 
@@ -129,7 +136,7 @@ class SteeringSettings:
             "do_projection": self.do_projection,
             "normalize": self.normalize,
             "max_new_tokens": self.max_new_tokens,
-            "n_prompts": self.n_test_datapoints,
+            "n_test_datapoints": self.n_test_datapoints,
             "add_every_token_position": self.add_every_token_position,
             "system_prompt": self.system_prompt,
             "vectors_dir": self.vectors_dir
