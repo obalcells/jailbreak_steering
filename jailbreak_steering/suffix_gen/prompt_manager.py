@@ -35,11 +35,8 @@ class PromptManager(object):
 
         self._instruction_slice = find_string_in_tokens(self.instruction, toks, self.tokenizer)
         self._control_slice = find_string_in_tokens(self.control, toks, self.tokenizer) 
-        self._assistant_role_slice = find_string_in_tokens(E_INST, toks, self.tokenizer)
         self._target_slice = find_string_in_tokens(self.target, toks, self.tokenizer) 
         self._loss_slice = slice(self._target_slice.start-1, self._target_slice.stop-1)
-        
-        assert self._target_slice.start == self._assistant_role_slice.stop
 
         self.input_ids = torch.tensor(toks[:self._target_slice.stop], device=self.device)
 
@@ -50,10 +47,6 @@ class PromptManager(object):
     @property
     def instruction_str(self):
         return self.tokenizer.decode(self.input_ids[self._instruction_slice])
-
-    @property
-    def assistant_role_str(self):
-        return self.tokenizer.decode(self.input_ids[self._assistant_role_slice])
 
     @property
     def target_str(self):

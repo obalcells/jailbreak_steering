@@ -1,9 +1,9 @@
 {
     "system_prompt": null,
-    "max_steps": 50,
-    "batch_size": 128,
-    "topk": 8,
-    "early_stop_threshold": 0.04,
+    "max_steps": 256,
+    "batch_size": 512,
+    "topk": 256,
+    "early_stop_threshold": 0.00,
     "success_threshold": 0.1,
     "reuse_control": false,
     "reset_control_after": 5,

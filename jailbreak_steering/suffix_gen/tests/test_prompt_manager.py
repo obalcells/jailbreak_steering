@@ -28,6 +28,5 @@ def test_prompt_manager(tokenizer):
     assert prompt_manager.full_prompt_str == expected_prompt_str
 
     assert prompt_manager.instruction_str == instruction
-    assert prompt_manager.assistant_role_str == E_INST
     assert prompt_manager.target_str == target
     assert prompt_manager.control_str == control

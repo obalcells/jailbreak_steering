@@ -5,6 +5,7 @@ import time
 import numpy as np
 import torch
 import pandas as pd
+import gc
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -85,10 +86,14 @@ def generate_suffix(model, tokenizer, instruction, target, control_init, config,
     start = time.time()
 
     control_str, _, steps = suffix_gen.run()
+    prompt = suffix_gen.prompt
+
+    del suffix_gen;
+    gc.collect(); torch.cuda.empty_cache()
 
     runtime = time.time() - start
-    loss = evaluate_target_loss(model, suffix_gen.prompt).item()
-    gen_str = evaluate_generation(model, tokenizer, suffix_gen.prompt, max_new_tokens=256)
+    loss = evaluate_target_loss(model, prompt).item()
+    gen_str = evaluate_generation(model, tokenizer, prompt, max_new_tokens=256)
 
     success = (target in gen_str or loss < config['success_threshold'])
 

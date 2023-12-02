@@ -5,6 +5,7 @@ import os
 import json
 import time
 import einops
+import gc
 
 from torch import Tensor
 from jaxtyping import Int, Float
@@ -12,6 +13,7 @@ from typing import Optional, List, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
+from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
 
 LOG_FLUSH_INTERVAL = 10
 
@@ -36,6 +38,9 @@ class SuffixGen():
     ):
         self.model = model
         self.tokenizer = tokenizer
+
+        if system_prompt == "default":
+            system_prompt = DEFAULT_SYSTEM_PROMPT
 
         self.prompt = PromptManager(
             instruction,
@@ -87,6 +92,7 @@ class SuffixGen():
             if (n_step+1) % LOG_FLUSH_INTERVAL == 0:
                 self._save_log()
 
+        self._finalize_log(best_control, best_loss)
         self._save_log()
         return best_control, best_loss, n_step
 
@@ -150,7 +156,7 @@ class SuffixGen():
         grad = control_toks_one_hot.grad.clone()
 
         # Clean up
-        self.model.zero_grad()
+        self.model.zero_grad(); gc.collect()
 
         return grad
 
@@ -290,33 +296,20 @@ class SuffixGen():
     def _finalize_log(self, best_control: str, best_loss: float):
         self.log["best_control"] = best_control
         self.log["best_loss"] = best_loss
-        self.log["runtime"] = time.time() - self.log["start_time"]
+        self.log["end_time"] = time.time()
+        self.log["runtime"] = self.log["end_time"] - self.log["start_time"]
         self.log["n_steps"] = len(self.log["steps"])
 
     def _log_step(self, n_step: int, control: str, loss: float):
         step = {
             "n_step": n_step,
             "control": control,
-            "loss": float(f"{loss:.5f}"),
-            "time": float(f"{time.time():.5f}"),
+            "loss": loss,
+            "time": time.time(),
         }
         if self.verbose:
             print(step)
         self.log["steps"].append(step)
-
-    # def _print_step_info(self, step, control, loss, step_runtime):
-    #     control_length = len(self.tokenizer(control, add_special_tokens=False).input_ids)
-    #     print(f'Current length: {control_length}, Control str: {control}')
-    #     print(f'Step: {step}, Current Loss: {loss:.5f}, Last runtime: {step_runtime:.5f}')
-    #     print(" ", flush=True)
-
-
-    # def _update_log(self, step, control, loss, step_runtime):
-    #     self.log["control_str"] = control
-    #     self.log["control_strs"].append(control)
-    #     self.log["n_steps"] = step
-    #     self.log["losses"].append(loss)
-    #     self.log["runtime"] += step_runtime
 
 def get_nonascii_toks(tokenizer, device):
     def is_ascii(s):
