@@ -2,12 +2,12 @@
     "system_prompt": null,
     "max_steps": 512,
     "batch_size": 256,
-    "topk": 32,
+    "topk": 128,
     "early_stop_threshold": 0.00,
     "success_threshold": 0.1,
     "reuse_control": false,
     "reset_control_after": 5,
-    "control_len": 20,
+    "control_len": 30,
     "verbose": true,
     "use_cache": true
 }
