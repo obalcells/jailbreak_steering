@@ -44,4 +44,6 @@ CUDA_VISIBLE_DEVICES=1 nohup python3 benchmarking/run_benchmarks.py --configs 3 
 
 CUDA_VISIBLE_DEVICES=2 nohup python3 benchmarking/run_benchmarks.py --configs 5 > output2_again.out 2>&1 &
 
-CUDA_VISIBLE_DEVICES=3 nohup python3 benchmarking/run_benchmarks.py --configs 7 > output2_again.out 2>&1 &
+CUDA_VISIBLE_DEVICES=3 nohup python3 benchmarking/run_benchmarks.py --configs 7 > output3_again.out 2>&1 &
+
+CUDA_VISIBLE_DEVICES=5 nohup python3 benchmarking/run_benchmarks.py --configs 11 > output3_again.out 2>&1 &
