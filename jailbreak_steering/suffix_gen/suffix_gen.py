@@ -16,6 +16,7 @@ from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
 
 LOG_FLUSH_INTERVAL = 10
+MAX_EVAL_BATCH_SIZE = 128 # limits the effective batch size for evaluations, useful to limit memory usage
 
 class SuffixGen():
 
@@ -31,11 +32,14 @@ class SuffixGen():
         batch_size: int,
         max_steps: int,
         early_stop_threshold: float,
+        log_path: str,
         allow_nonascii: bool=False,
         verbose: bool=False,
-        logs_dir: Optional[str]=None,
         use_cache: bool=True,
     ):
+        if batch_size > MAX_EVAL_BATCH_SIZE and batch_size % MAX_EVAL_BATCH_SIZE != 0:
+            raise ValueError(f"batch_size must be a multiple of {MAX_EVAL_BATCH_SIZE} when batch_size > {MAX_EVAL_BATCH_SIZE}")
+
         self.model = model
         self.tokenizer = tokenizer
 
@@ -48,7 +52,7 @@ class SuffixGen():
             tokenizer,
             system_prompt,
             control_init,
-            device=model.device,
+            device=self.model.device,
         )
 
         self.topk = topk
@@ -62,7 +66,7 @@ class SuffixGen():
         if not self.allow_nonascii:
             self._nonascii_toks = get_nonascii_toks(self.tokenizer, self.model.device)
 
-        self.log_path = os.path.join(logs_dir, f'{time.strftime("%Y%m%d-%H:%M:%S")}.json')
+        self.log_path = log_path
 
         self.use_cache = use_cache
         if self.use_cache:
@@ -70,6 +74,7 @@ class SuffixGen():
                 self.prompt.input_ids[:self.prompt._instruction_slice.stop].unsqueeze(0),
                 use_cache=True,
             ).past_key_values
+            self.past_key_values = self.prepare_past_key_values(batch_size=min(self.batch_size, MAX_EVAL_BATCH_SIZE))
 
     def run(self):
         self._initialize_log()
@@ -101,15 +106,14 @@ class SuffixGen():
         # 1. Compute gradients of target loss with respect to each control token
         control_tok_grads = self.compute_control_token_gradients()
 
-        # 2. Get candidate control token modifications
         with torch.no_grad():
+            # 2. Get candidate control token modifications
             sampled_control_cands_toks = self.sample_control_candidates(control_tok_grads, batch_size, topk, curr_control_toks=self.prompt.control_toks)
-        control_cands, control_cands_toks = self.filter_cand_controls(sampled_control_cands_toks, curr_control=self.prompt.control_str)
+            control_cands, control_cands_toks = self.filter_cand_controls(sampled_control_cands_toks, curr_control=self.prompt.control_str)
 
-        # 3. Evaluate each control token modification's target loss, pick the best one
-        with torch.no_grad():
+            # 3. Evaluate each control token modification's target loss, pick the best one
             losses = self.evaluate_control_cand_losses(control_cands_toks).detach().cpu()
-        min_idx = losses.argmin()
+            min_idx = losses.argmin()
 
         next_control, cand_loss = control_cands[min_idx], losses[min_idx].item()
 
@@ -156,7 +160,8 @@ class SuffixGen():
         grad = control_toks_one_hot.grad.clone()
 
         # Clean up
-        self.model.zero_grad(); gc.collect()
+        self.model.zero_grad()
+        gc.collect(); torch.cuda.empty_cache()
 
         return grad
 
@@ -219,7 +224,10 @@ class SuffixGen():
         valid_cand_idxs = []
 
         for i in range(control_cand.shape[0]):
-            if decoded_cands[i] != curr_control and len(re_encoded_cands[i]) == len(control_cand[i]):
+            if (decoded_cands[i] != curr_control and # filter duplicates of current candidate
+                len(re_encoded_cands[i]) == len(control_cand[i]) and # ensure that the number of tokens is preserved
+                decoded_cands[i] == decoded_cands[i].strip() # ensure that the candidate doesn't begin/end with whitespace
+            ):
                 valid_cand_idxs.append(i)
 
         cands = [decoded_cands[i] for i in valid_cand_idxs]
@@ -228,6 +236,10 @@ class SuffixGen():
         if len(cands) == 0:
             cands.append(curr_control)
             cands_toks.append(torch.tensor(self.tokenizer(curr_control, add_special_tokens=False).input_ids).to(self.model.device))
+
+        # pad to batch_size so that it aligns with prev_key_values cache
+        cands = cands + [cands[-1]] * (self.batch_size - len(cands))
+        cands_toks = cands_toks + [cands_toks[-1]] * (self.batch_size - len(cands_toks))
 
         cands_toks = torch.stack(cands_toks, dim=0)
 
@@ -239,16 +251,27 @@ class SuffixGen():
 
         if self.use_cache:
             cache_offset = self.prompt._instruction_slice.stop
-            past_key_values = self.prepare_past_key_values(batch_size=cands_input_ids.shape[0])
+            past_key_values = self.past_key_values
         else:
             cache_offset = 0
             past_key_values = None
 
-        logits = self.model(
-            cands_input_ids[:, cache_offset:],
-            use_cache=self.use_cache,
-            past_key_values=past_key_values
-        ).logits
+        if self.batch_size > MAX_EVAL_BATCH_SIZE:
+            batched_logits = []
+            for i in range(self.batch_size // MAX_EVAL_BATCH_SIZE):
+                logits = self.model(
+                    cands_input_ids[i*MAX_EVAL_BATCH_SIZE:(i+1)*MAX_EVAL_BATCH_SIZE, cache_offset:],
+                    use_cache=self.use_cache,
+                    past_key_values=past_key_values
+                ).logits
+                batched_logits.append(logits)
+            logits = torch.cat(batched_logits, dim=0)
+        else:
+            logits = self.model(
+                cands_input_ids[:, cache_offset:],
+                use_cache=self.use_cache,
+                past_key_values=past_key_values
+            ).logits
 
         loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
         losses = loss_fn(

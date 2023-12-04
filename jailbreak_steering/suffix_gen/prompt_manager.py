@@ -1,6 +1,5 @@
 import torch
 from transformers import AutoTokenizer
-import time
 
 from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST, find_string_in_tokens
 
@@ -19,9 +18,8 @@ class PromptManager(object):
         self.target = target
         self.tokenizer = tokenizer
         self.system_prompt = system_prompt
-        self.device = device
-
         self.control = control_init
+        self.device = device
 
         self._update_ids()
 

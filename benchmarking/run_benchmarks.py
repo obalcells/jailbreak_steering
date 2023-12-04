@@ -1,10 +1,6 @@
 import argparse
-import json
 import os
 import subprocess
-import pandas as pd
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
 
 BENCHMARK_DATASET_PATH = 'benchmarking/dataset/harmful_behaviors_for_bench_hard.csv'
 BENCHMARK_RESULTS_DIR = 'benchmarking/results'
