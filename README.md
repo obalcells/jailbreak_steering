@@ -29,11 +29,15 @@ python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
     --results_dir <path_to_results_dir> \
     --logs_dir <path_to_logs_dir> \
     --config_path <path_to_config>
+    --start_idx <idx_of_first_prompt> \
+    --end_idx <idx_of_last_prompt>
 ```
 
-- `dataset_path` is points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
-- `output_dir` is the directory where the generated suffixes will be saved.
+- `dataset_path` points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
+- `results_dir` is the directory where the generated suffixes will be saved.
 - `logs_dir` is the directory where the logs will be saved.
+- `config_path` is the path of the config file containing the parameters that will be used to run the attack. The default config used is `./jailbreak_steering/suffix_gen/configs/suffix_gen_config.json`.
+- `start_idx` and `end_idx` (non-inclusive) define a slice of the dataset. The attack is run only for the prompts in `dataset[start_idx:end_idx]`. By default we take only the first 10 prompts.
 
 ### Process suffix generation results
 
@@ -63,19 +67,23 @@ python3 -m jailbreak_steering.vector_gen.run_vector_gen \
 ### Text generation applying steering vectors
 ```bash
 python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
-    --layers <layers> \
-    --multipliers <multipliers> \
-    --label <steering_vector_label> \
+    --dataset_path <path_to_data> \
+    --hf_dataset <hf_dataset_id> \
+    --results_dir <path_to_results_dir> \
     --vectors_dir <path_to_vectors_dir> \
-    --hf_dataset_label <hf_dataset_label> \
-    --output_dir <path_to_results_dir>
-    --run_locally <true_or_false> \
-    --do_projection <true_or_false> \
-    --normalize <true_or_false> \
-    --system_prompt <system_prompt_str> \
+    --config_path <path_to_steering_config> \
+    --run_locally <boolean_flag_run_locally_or_modal> \
+    --num_test_datapoints <max_number_prompts> \
     --max_new_tokens <number_tokens_generated_per_prompt> \
-    --n_test_datapoints <max_number_prompts>
 ```
+
+- `dataset_path` points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
+- `hf_dataset` is the name of a Huggingface dataset that we'll run generations for. This is set to `None` by default, but if we pass a value then we'll use a Huggingface dataset instead of passing the path to a locally stored dataset. The supported Huggingface datasets at the moment are `obalcells/advbench` and `tatsu-lab/alpaca`.
+- `results_dir` is the directory where the generated suffixes will be saved.
+- `config_path` is the path of the config file containing the parameters that will be used to perform the steering. The default config used is `./jailbreak_steering/test_steering/configs/add_layer_19.json`. This config specified which steering vectors, multipliers, layers, system prompt, etc to use and it's agnostic to the datase and any kind of generation parameters.
+- `run_locally` is a boolean flag specifying whether to run the steering locally or in a [Modal](modal.com) instance. This is set to `True` by default.
+- `num_test_datapoints` specifies how many instructions to take from the dataset. This is set to `None` by default which means taking the whole dataset.
+- `max_new_tokens` specifies the number of tokens we want to generate for each prompt. This is set to `50` by default.
 
 ## Tests
 
