@@ -5,6 +5,8 @@ from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load
 from jailbreak_steering.utils.tokenize_llama_chat import find_string_in_tokens, tokenize_llama_chat, E_INST
 from jailbreak_steering.utils.steering_utils import add_vector_after_position, find_instruction_end_postion
 from typing import Tuple, Optional
+from torch import Tensor
+from jaxtyping import Int, Float
 
 
 class AttnWrapper(t.nn.Module):
@@ -75,7 +77,7 @@ class BlockOutputWrapper(t.nn.Module):
                 do_projection=self.do_projection,
                 normalize=self.normalize
             )
-            output = (augmented_output + self.add_activations,) + output[1:]
+            output = (augmented_output,) + output[1:]
 
         if not self.save_internal_decodings:
             return output
@@ -144,7 +146,7 @@ class LlamaWrapper:
         for layer in self.model.model.layers:
             layer.save_internal_decodings = value
 
-    def set_after_positions(self, pos: int):
+    def set_after_positions(self, pos: Int[Tensor, "batch_size 1"]):
         for layer in self.model.model.layers:
             layer.after_position = pos
 
@@ -156,7 +158,8 @@ class LlamaWrapper:
             no_final_eos=True,
         )
         tokens = t.tensor(tokens).unsqueeze(0).to(self.device)
-        return self.generate(tokens, max_new_tokens=max_new_tokens)
+        output_tokens = self.model.generate(tokens, max_new_tokens=max_new_tokens)
+        return self.tokenizer.batch_decode(output_tokens)[0]
 
     def generate_text_with_conversation_history(
         self, history: Tuple[str, Optional[str]], max_new_tokens=50
@@ -168,28 +171,35 @@ class LlamaWrapper:
             no_final_eos=True
         )
         tokens = t.tensor(tokens).unsqueeze(0).to(self.device)
-        return self.generate(tokens, max_new_tokens=max_new_tokens)
+        output_tokens = self.model.generate(tokens, max_new_tokens=max_new_tokens)
+        return self.tokenizer.batch_decode(output_tokens)[0]
 
-    def generate(self, tokens, *args, **kwargs):
-        assert tokens.shape[0] == 1, "Batch size must be 1"
+    def generate(self, tokens, **kwargs):
+        kwargs["max_new_tokens"] = 50 if kwargs.get("max_new_tokens") is None else kwargs.get("max_new_tokens")
+
         with t.no_grad():
             if self.add_only_after_end_str:
-                instr_pos = find_instruction_end_postion(tokens[0], self.END_STR)
+                instr_pos = [find_instruction_end_postion(tokens[i], self.END_STR) for i in range(tokens.size(0))]
+                instr_pos = t.tensor(instr_pos).unsqueeze(-1).to(self.device)
+
+                # We shift the instruction end index by the number of padding tokens added
+                pad_token_id = kwargs.get("pad_token_id", self.tokenizer.pad_token_id)
+                instr_pos -= (tokens == pad_token_id).sum(dim=-1, keepdim=True)
             else:
                 instr_pos = None
-            self.set_after_positions(instr_pos)
-            generated = self.model.generate(
-                inputs=tokens, max_new_tokens=max_new_tokens, top_k=1
-            )
-            return self.tokenizer.batch_decode(generated)[0]
+            # The vector is added starting from the last token in the end instruction string ('[/INST]')
+            self.set_after_positions(instr_pos - 1)
+            output_tokens = self.model.generate(tokens, **kwargs)
+            return output_tokens
 
     def get_logits(self, tokens):
         with t.no_grad():
             if self.add_only_after_end_str:
-                instr_pos = find_instruction_end_postion(tokens[0], self.END_STR)
+                instr_pos = [find_instruction_end_postion(tokens[i], self.END_STR) for i in range(tokens.size(0))]
+                instr_pos = t.tensor(instr_pos).to(self.device)
             else:
                 instr_pos = None
-            self.set_after_positions(instr_pos)
+            self.set_after_positions(instr_pos - 1)
             logits = self.model(tokens).logits
             return logits
 

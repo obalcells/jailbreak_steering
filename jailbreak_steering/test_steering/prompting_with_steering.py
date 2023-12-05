@@ -1,31 +1,51 @@
 import argparse
 import json
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+import gc
+import math
+import time
+from typing import Dict, List, Optional
 import numpy as np
-from datasets import load_dataset
+import torch
 import tqdm
-from dataclasses import dataclass
-import torch as t
+from datasets import load_dataset
 
-from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_tokenizer
-from jailbreak_steering.utils.steering_settings import SteeringSettings
+from jailbreak_steering.suffix_gen.run_suffix_gen import DEFAULT_DATASET_PATH, load_config, load_dataset
+from jailbreak_steering.utils.llama_wrapper import LlamaWrapper
+from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT, format_instruction_answer_llama_chat
+from jailbreak_steering.vector_gen.run_vector_gen import DEFAULT_LABEL, DEFAULT_VECTORS_DIR, make_tensor_save_suffix
 
-from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
-from jailbreak_steering.suffix_gen.run_suffix_gen import make_tensor_save_suffix, DEFAULT_VECTORS_DIR, DEFAULT_LABEL, SYSTEM_PROMPT
+DEFAULT_RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+DEFAULT_STEERING_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs", "add_layer_19.json")
+DEFAULT_MAX_NEW_TOKENS = 50 
 
-# TODO: Remove this (it's used to be able to pass a steering wrapper class as input)
-# import importlib
-# from steering_wrappers.add_vec_steering_wrapper import AddVecSteeringWrapper 
-# Function to import module at the runtime
-# def dynamic_import(module):
-#     return importlib.import_module(module)
+def make_config_suffix(config: Dict) -> str:
+    if config["system_prompt"] is None or len(config["system_prompt"]) == 0:
+        system_prompt_short = "none"
+    if config["system_prompt"] == DEFAULT_SYSTEM_PROMPT:
+        system_prompt_short = "default"
+    else:
+        system_prompt_short = "custom"
 
-# DEFAULT_STEERING_WRAPPER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "steering_wrappers/add_vec_steering_wrapper.py")
-DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "steered_generations")
-DEFAULT_DATASET = "obalcells/advbench"
+    elements = {
+        "layers": config["layers"],
+        "multipliers": config["multipliers"],
+        "vector_label": config["vector_label"],
+        "do_projection": config["do_projection"],
+        "normalize": config["normalize"],
+        "add_every_token_position": config["add_every_token_position"],
+        "system_prompt": system_prompt_short,
+    }
+
+    timestamp = time.strftime("%Y%m%d-%H:%M")
+
+    suffix = timestamp + "_" + "_".join([f"{k}={v}" for k, v in elements.items() if v is not None])
+
+    return suffix
 
 def get_steering_vector(label, layer, vectors_dir):
-    return t.load(
+    return torch.load(
         os.path.join(
             vectors_dir,
             f"vec_layer_{make_tensor_save_suffix(layer, label)}.pt",
@@ -37,15 +57,14 @@ def load_instructions_from_hf_dataset(
     n_test_datapoints: int
 ) -> List[str]:
 
-    if hf_dataset == "advbench":
+    if hf_dataset == "obalcells/advbench":
         dataset = load_dataset('obalcells/advbench', split="train")
         instructions = [dataset[i]["goal"] for i in range(len(dataset))]
         instructions = instructions[:n_test_datapoints]
       
-    elif hf_dataset == "alpaca":
+    elif hf_dataset == "tatsu-lab/alpaca":
         dataset = load_dataset('tatsu-lab/alpaca', split='train')
-        # some prompts provide extra context (`input`) related to the instruction
-        # we discard all such entries
+        # The prompts providing extra context (`input`) are discarded
         instructions = [
             dataset[i]["instruction"]
             for i in range(len(dataset)) if len(dataset[i]["input"]) == 0
@@ -58,13 +77,13 @@ def load_instructions_from_hf_dataset(
     return instructions 
 
 def generate(
-    self,
     model,
     tokenizer,
     prompts: List[str],
     batch_size=64,
     max_new_tokens=256
 ) -> List[str]:
+
     generations = []
 
     for i in tqdm.tqdm(range(0, len(prompts), batch_size)):
@@ -94,130 +113,138 @@ def generate(
 
     return generations
 
-def run_local_steered_text_generation(settings: SteeringSettings) -> Dict:
+def run_local_steered_text_generation(
+    instructions: List[str],
+    max_new_tokens: int,
+    steering_config: Dict,
+    steering_vectors: List[torch.Tensor]
+) -> List[str]:
+
     model = LlamaWrapper(
-        settings.system_prompt,
-        size=settings.model_size,
-        use_chat=not settings.use_base_model,
-        add_only_after_end_str=not settings.add_every_token_position,
-        override_model_weights_path=settings.override_model_weights_path,
+        steering_config["system_prompt"],
+        add_only_after_end_str=not steering_config["add_every_token_position"],
     )
     model.set_save_internal_decodings(False)
+    model.reset_all()
 
-    for layer in settings.layers:
-        vector = get_steering_vector(layer, name_path)
-        vector = vector.to(model.device)
+    for i, layer in enumerate(steering_config["layers"]):
+        vector = steering_vectors[i].to(model.device)
+        multiplier = steering_config["multipliers"][i]
 
         model.set_add_activations(
             layer,
             multiplier * vector,
-            do_projection=settings.do_projection,
-            normalize=settings.normalize
+            do_projection=steering_config["do_projection"],
+            normalize=steering_config["normalize"]
         )
-
-    hf_dataset = settings.dataset
-    max_num_instructions = settings.n_test_datapoints
-
-    instructions = load_instructions_from_hf_dataset(
-        hf_dataset,
-        max_num_instructions
-    )
 
     prompts = [
         format_instruction_answer_llama_chat(
-            tokenizer,
+            model.tokenizer,
             [(instruction, None)],
-            system_prompt,
+            steering_config["system_prompt"],
             no_final_eos=True
         )
         for instruction in instructions
     ]
 
-    generations = generate(
+    return generate(
         model,
-        tokenizer,
-        instructions,
+        model.tokenizer,
+        prompts,
+        max_new_tokens=max_new_tokens
     )
 
-    results = {
-        "settings": settings.get_settings_dict(),
-        "generations": []
-    }
+def run_modal_steered_text_generation(instructions: List[str], max_new_tokens: int, steering_config: Dict, steering_vectors: List[torch.Tensor]) -> Dict:
+    raise NotImplementedError("Modal not implemented yet")
 
-    for i in range(len(data)):
-        results["generations"].append({
-            "instruction": instructions[i],
-            "generation": generations[i]
-        })
+def prompting_with_steering(
+    local_data_path: str,
+    vectors_dir: str,
+    config_path: str,
+    results_dir: str,
+    hf_dataset: str = None,
+    num_test_datapoints: int = None, # None means use all datapoints
+    max_new_tokens: int = 256,
+    run_locally: bool = True,
+):
+    steering_config = load_config(config_path)
 
-    return results 
+    steering_vector_label = steering_config["vector_label"]
 
+    # Load the steering vectors locally
+    steering_vectors = []
+    for layer in steering_config["layers"]:
+        vec = get_steering_vector(steering_vector_label, layer, vectors_dir)
+        vec = vec.cpu().type(torch.float16)
+        steering_vectors.append(vec)
 
-if __name__ == "__main__":
-    """
-    python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
-        --layers <layers> \
-        --multipliers <multipliers> \
-        --label <steering_vector_label> \
-        --vectors_dir <path_to_vectors_dir> \
-        --hf_dataset_label <hf_dataset_label> \
-        --output_dir <path_to_results_dir>
-        --run_locally <true_or_false> \
-        --do_projection <true_or_false> \
-        --normalize <true_or_false> \
-        --system_prompt <system_prompt_str> \
-        --max_new_tokens <number_tokens_generated_per_prompt> \
-        --n_test_datapoints <max_number_prompts>
-    """
+    # Load the list of instructions
+    if hf_dataset is not None:
+        instructions = load_instructions_from_hf_dataset(hf_dataset, num_test_datapoints)
+    else:
+        instructions, _ = load_dataset(local_data_path, n=num_test_datapoints)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--layers", nargs="+", type=int, required=True)
-    parser.add_argument("--multipliers", nargs="+", type=float, required=True)
-    parser.add_argument("--label", type=str, default=DEFAULT_LABEL)
-    parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
-    parser.add_argument("--hf_dataset_label", type=str, choices=["advbench"], default=DEFAULT_DATASET)
-    parser.add_argument("--output_dir", type=str, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument('--run_locally', action='store_true', default=True)
-    parser.add_argument("--do_projection", action="store_true", default=False)
-    parser.add_argument("--normalize", action="store_true", default=True)
-    parser.add_argument("--system_prompt", type=str, default=SYSTEM_PROMPT)
-    parser.add_argument("--max_new_tokens", type=int, default=256)
-    parser.add_argument("--n_test_datapoints", type=int, default=100)
+    start_time = time.time()
 
-    args = parser.parse_args()
+    generations = run_local_steered_text_generation(
+        instructions, max_new_tokens, steering_config, steering_vectors
+    )
 
-    assert args.hf_dataset == "advbench", "Only the advbench dataset is supported for now"
-    assert args.run_locally == True, "Option to run in Modal not implemented yet"
-
-    # attack_lib = dynamic_import(steering_wrapper_path)
-
-    steering_settings = SteeringSettings()
-
-    steering_settings.layers = args.layers
-    steering_settings.multipliers = args.multipliers
-    steering_settings.do_projection = args.do_projection
-    steering_settings.normalize = args.normalize
-    steering_settings.system_prompt = args.system_prompt
-    steering_settings.dataset = args.hf_dataset
-    steering_settings.max_new_tokens = args.max_new_tokens
-    steering_settings.n_test_datapoints = args.n_test_datapoints
-    steering_settings.add_every_token_position = args.add_every_token_position
-    steering_settings.vector_label = args.label
+    runtime = round(time.time() - start_time)
     
-    results = run_local_steered_text_generation(steering_settings)
+    results = {}
 
-    # we also store the arguments that we passed to the script
-    results["arguments"] = vars(args)
+    results["config"] = steering_config
+    results["vectors_dir"] = vectors_dir
+    results["local_data_path"] = local_data_path
+    results["num_test_datapoints"] = num_test_datapoints
+    results["max_new_tokens"] = max_new_tokens
+    results["runtime"] = runtime
 
-    results_suffix = steering_settings.make_result_save_suffix()
+    results["generations"] = []
+    for instruction, generation in zip(instructions, generations):
+        results["generations"].append({ "instruction": instruction, "generation": generation })
 
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    results_suffix = make_config_suffix(steering_config)
+
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
 
     results_path = os.path.join(
-        args.output_dir,
+        results_dir,
         f"results_{results_suffix}.json"
     )
 
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)
+
+    print(f"Finished running {num_test_datapoints} prompts in {runtime} seconds")
+    print(f"Saved results to: {results_path}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--hf_dataset", type=str, default=None)
+    parser.add_argument("--results_dir", type=str, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
+    parser.add_argument("--config_path", type=str, default=DEFAULT_STEERING_CONFIG_PATH)
+    parser.add_argument('--run_locally', action='store_true', default=True)
+    parser.add_argument("--num_test_datapoints", type=int, default=None)
+    parser.add_argument("--max_new_tokens", type=int, default=50)
+
+    args = parser.parse_args()
+
+    assert args.run_locally == True, "Option to run in Modal not implemented yet"
+
+    prompting_with_steering(
+        args.dataset_path,
+        args.vectors_dir,
+        args.config_path,
+        args.results_dir,
+        hf_dataset=args.hf_dataset,
+        num_test_datapoints=args.num_test_datapoints,
+        max_new_tokens=args.max_new_tokens,
+        run_locally=args.run_locally,
+    )

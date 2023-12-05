@@ -1,7 +1,8 @@
-import torch as t
 from typing import Optional
 import os
-
+import torch
+from torch import Tensor
+from jaxtyping import Int, Float
 
 def project_onto_orthogonal_complement(tensor, onto):
     """
@@ -18,11 +19,16 @@ def project_onto_orthogonal_complement(tensor, onto):
 
 
 def add_vector_after_position(
-    matrix, vector, position_ids, after=None, do_projection=True, normalize=True
+    matrix: Float[Tensor, "batch_size seq_len d_model"],
+    vector: Float[Tensor, "d_model"],
+    position_ids: Int[Tensor, "batch_size seq_len"],
+    after: Int[Tensor, "batch_size 1"]=None,
+    do_projection=True,
+    normalize=True
 ):
     after_id = after
     if after_id is None:
-        after_id = position_ids.min().item() - 1
+        after_id = position_ids.min(dim=1).item() - 1
 
     mask = position_ids > after_id
     mask = mask.unsqueeze(-1)
@@ -47,7 +53,7 @@ def find_last_subtensor_position(tensor, sub_tensor):
     if m > n:
         return -1
     for i in range(n - m, -1, -1):
-        if torch.tequal(tensor[i : i + m], sub_tensor):
+        if torch.equal(tensor[i : i + m], sub_tensor):
             return i
     return -1
 
