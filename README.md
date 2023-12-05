@@ -81,7 +81,7 @@ python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
 - `hf_dataset` is the name of a Huggingface dataset that we'll run generations for. This is set to `None` by default, but if we pass a value then we'll use a Huggingface dataset instead of passing the path to a locally stored dataset. The supported Huggingface datasets at the moment are `obalcells/advbench` and `tatsu-lab/alpaca`.
 - `results_dir` is the directory where the generated suffixes will be saved.
 - `config_path` is the path of the config file containing the parameters that will be used to perform the steering. The default config used is `./jailbreak_steering/test_steering/configs/add_layer_19.json`. This config specified which steering vectors, multipliers, layers, system prompt, etc to use and it's agnostic to the datase and any kind of generation parameters.
-- `run_locally` is a boolean flag specifying whether to run the steering locally or in a [Modal](modal.com) instance. This is set to `True` by default.
+- `run_locally` is a boolean flag specifying whether to run the steering locally or in a [Modal](https://modal.com) instance. This is set to `True` by default.
 - `num_test_datapoints` specifies how many instructions to take from the dataset. This is set to `None` by default which means taking the whole dataset.
 - `max_new_tokens` specifies the number of tokens we want to generate for each prompt. This is set to `50` by default.
 
