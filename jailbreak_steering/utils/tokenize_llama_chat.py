@@ -86,3 +86,45 @@ def get_ascii_toks(tokenizer):
         token_id for token_id in range(3, tokenizer.vocab_size)
         if tokenizer.decode([token_id]).isascii() and tokenizer.decode([token_id]).isprintable()
     ]
+
+def format_instruction_answer_llama_chat(
+    tokenizer,
+    conversation: List[Tuple[str, Optional[str]]],
+    system_prompt: str=DEFAULT_SYSTEM_PROMPT,
+    no_final_eos: bool=True,
+) -> str:
+    """
+    conversation: a list of tuples of the form (user_input, model_output) - model_output can be None if there is no response yet
+    system_prompt: the system prompt to use for the conversation
+
+    Returns: a string that can be tokenized and passed to the model 
+    """
+    def _format_instruction_response(
+        instruction, model_output=None, is_first_message=False, no_eos=False
+    ) -> str:
+        if is_first_message and system_prompt and len(system_prompt) > 0:
+            system_content = f"<<SYS>>\n{system_prompt}\n<</SYS>>\n\n"
+        else:
+            system_content = ""
+
+        instruction_content = system_content + instruction.strip()
+
+        if model_output and len(model_output) > 0:
+            if no_eos:
+                response_content = model_output.strip()
+            else:
+                response_content = f"{model_output.strip()} {tokenizer.eos_token}"
+
+            return f"{B_INST} {instruction_content} {E_INST} {response_content}"
+        else:
+            return f"{B_INST} {instruction_content} {E_INST}"
+
+    prompt = ""
+    for i, (user_input, model_output) in enumerate(conversation):
+        prompt += _format_instruction_response(
+            user_input,
+            model_output,
+            i == 0,
+            no_final_eos and (i == len(conversation) - 1),
+        )
+    return prompt 
