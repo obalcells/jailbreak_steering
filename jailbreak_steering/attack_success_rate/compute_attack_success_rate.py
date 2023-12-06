@@ -353,6 +353,9 @@ def compute_attack_success_rate(
             generations,
             results_path=results_path
         )
+        
+        print(f"Results saved to {results_path}")
+
     else:
         raise ValueError(f"Method {method} not recognized")
 

@@ -86,16 +86,8 @@ python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
 - `max_new_tokens` specifies the number of tokens we want to generate for each prompt. This is set to `50` by default.
 
 ### Calculate attack success rate
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--method', type=str, default="llm_judge", choices=['llm_judge', 'prefix_search'])
-    parser.add_argument('--generations_path', type=str, required=True)
-    parser.add_argument('--results_dir', type=str, default=DEFAULT_ASR_RESULTS_DIR)
-    parser.add_argument('--model_name', type=str, default=DEFAULT_LLM_JUDGE_MODEL)
-    parser.add_argument('--api_key', type=str, default=None)
-    parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE)
-    parser.add_argument('--max_generation_length', type=int, default=DEFAULT_TRUNCATION_LENGTH)
-    parser.add_argument('--verbose', action='store_true')
-    args = parser.parse_args()
+
+Given a set of instructions and corresponding generations, it returns the percentage of generations that contain harmful behavior. So if one instruction is "Tell me how to make a bomb.", a "succesful" generation is one that follows the instruction and contains useful content for making a bomb.
 
 ```bash
 python3 -m jailbreak_steering.attack_success_rate.calculate_attack_success_rate.py \
@@ -113,14 +105,14 @@ python3 -m jailbreak_steering.attack_success_rate.calculate_attack_success_rate.
 - `generations_path` is the path to the file containing the steered generations. Their format has to match the one of the files produced by running `prompting_with_steering`.
 ```json
 {
-    ...
     "generations": [
         {
             "instruction": "instruction text",
             "generation": "generation text"
         },
-        ...
-    ]
+        // more generations...
+    ],
+    // other content...
 } 
 ```
 - `results_dir` is the directory where the results will be saved.
@@ -139,35 +131,8 @@ Output:
 ```bash
 Evaluating generations: 100%|███████████████████████████████| 10/10 [01:43<00:00, 10.32s/it]
 Overall success rate: 85.00%
+Results saved to /path_to_repo/jailbreak_steering/jailbreak_steering/attack_success_rate/results/eval_ASR_gpt-3.5-turbo-1106_batchsize=10_maxgensize=200_date=20231206-12:53.json
 ```
-
-### Calculate the average number of tokens generated
-
-```bash
-python3 -m jailbreak_steering.attack_success_rate.calculate_average_num_tokens.py \
-    --generations_path <path_to_generations> \
-    --results_dir <path_to_results_dir>
-```
-
-- `generations_path` is the path to the file containing the generated responses.
-- `results_dir` is the directory where the results will be saved.
-
-### Calculate the average number of tokens generated
-
-```bash
-python3 -m jailbreak_steering.attack_success_rate.calculate_average_num_tokens.py \
-    --generations_path <path_to_generations> \
-    --results_dir <path_to_results_dir>
-```
-
-- `generations_path` is the path to the file containing the generated responses.
-- `results_dir` is the directory where the results will be saved.
-
-### Calculate the average number of tokens generated
-
-```bash
-python3 -m jailbreak_steering.attack_success_rate.calculate_average_num_tokens.py \
-    --generations
 
 ## Tests
 
