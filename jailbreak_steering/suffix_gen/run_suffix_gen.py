@@ -67,6 +67,14 @@ def evaluate_generation(
 
     return generation
 
+def load_results(results_dir: str, results_filename: str):
+    results_path = os.path.join(results_dir, results_filename)
+
+    if not os.path.exists(results_path):
+        return []
+
+    return json.load(open(results_path, "r"))
+
 def generate_suffix(model, tokenizer, instruction, target, control_init, config, log_path):
     suffix_gen = SuffixGen(
         model,
@@ -95,7 +103,7 @@ def save_results(results, results_dir, filename):
     with open(os.path.join(results_dir, filename), "w") as file:
         json.dump(results, file, indent=4)
 
-def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str, start_idx: int, end_idx: int):
+def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str, start_idx: int, end_idx: int, seed: int, retry_failed: bool):
 
     model = load_llama_2_7b_chat_model()
     tokenizer = load_llama_2_7b_chat_tokenizer()
@@ -104,16 +112,26 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
     config = load_config(config_path)
     default_control_init = ' '.join(['!' for _ in range(config['control_len'])])
  
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     control_init = default_control_init
-    all_results = []
-    successful_results = []
+    successful_results = load_results(results_dir, SUCCESSFUL_SUFFIX_GEN_RESULTS_FILENAME)
+    all_results = load_results(results_dir, ALL_SUFFIX_GEN_RESULTS_FILENAME)
 
     for idx in range(start_idx, end_idx):
         instruction, target = instructions[idx], targets[idx]
+
+        if instruction in [result['instruction'] for result in successful_results]:
+            print(f"Skipping instruction {instruction} because it has already been successfully processed.")
+            continue
+
+        if not retry_failed and instruction in [result['instruction'] for result in all_results]:
+            print(f"Skipping instruction {instruction} because it has already been processed.")
+            continue
+
+        print(f"Running instruction {instruction} ({idx} / {len(instructions)})")
         
         start_time = time.time()
         control, loss, steps = generate_suffix(
@@ -163,7 +181,11 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", type=str, default=DEFAULT_SUFFIX_GEN_CONFIG_PATH)
     parser.add_argument("--start_idx", type=int, default=0)
     parser.add_argument("--end_idx", type=int, default=10) # non-inclusive
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--retry_failed", action="store_true")
 
     args = parser.parse_args()
 
-    run_suffix_gen(args.dataset_path, args.results_dir, args.logs_dir, args.config_path, args.start_idx, args.end_idx)
+    run_suffix_gen(
+        args.dataset_path, args.results_dir, args.logs_dir, args.config_path, args.start_idx, args.end_idx, args.seed, args.retry_failed
+    )

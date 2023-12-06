@@ -1,13 +1,13 @@
 {
-    "system_prompt": null,
-    "max_steps": 100,
-    "batch_size": 128,
-    "topk": 8,
-    "early_stop_threshold": 0.04,
+    "system_prompt": "default",
+    "max_steps": 500,
+    "batch_size": 512,
+    "topk": 256,
+    "early_stop_threshold": 0.05,
     "success_threshold": 0.1,
-    "reuse_control": false,
+    "reuse_control": true,
     "reset_control_after": 5,
-    "control_len": 30,
+    "control_len": 20,
     "verbose": true,
     "use_cache": true
 }

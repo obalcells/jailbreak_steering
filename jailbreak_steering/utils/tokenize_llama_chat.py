@@ -25,6 +25,9 @@ def tokenize_llama_chat(
     Returns: a list of tokens
     """
 
+    if system_prompt == "default":
+        system_prompt = DEFAULT_SYSTEM_PROMPT
+
     def _instruction_response_to_tokens(
         instruction, model_output=None, is_first_message=False, no_eos=False
     ) -> List[int]:
@@ -99,6 +102,10 @@ def format_instruction_answer_llama_chat(
 
     Returns: a string that can be tokenized and passed to the model 
     """
+
+    if system_prompt == "default":
+        system_prompt = DEFAULT_SYSTEM_PROMPT
+
     def _format_instruction_response(
         instruction, model_output=None, is_first_message=False, no_eos=False
     ) -> str:

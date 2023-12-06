@@ -43,9 +43,6 @@ class SuffixGen():
         self.model = model
         self.tokenizer = tokenizer
 
-        if system_prompt == "default":
-            system_prompt = DEFAULT_SYSTEM_PROMPT
-
         self.prompt = PromptManager(
             instruction,
             target,
