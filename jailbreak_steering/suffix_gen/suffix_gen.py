@@ -328,7 +328,7 @@ class SuffixGen():
             "time": time.time(),
         }
         if self.verbose:
-            print(step)
+            print(step, flush=True)
         self.log["steps"].append(step)
 
 def get_nonascii_toks(tokenizer, device):
