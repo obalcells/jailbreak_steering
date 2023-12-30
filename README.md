@@ -3,53 +3,56 @@
 ## Setup
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+chmod +x setup.sh & source setup.sh
 ```
 
-Then create a `.env` file with the following variables (see `.env.example`):
-
-```
-HF_TOKEN=huggingface_token_with_access_to_llama2
-```
+This command will
+1. Prompt you for your HuggingFace credentials and cache them.
+2. Create and activate a venv. 
+3. Install the required packages.
 
 ## Usage
 
-Note that all commands should be run from the root directory.
+**Note**: all commands should be run from the **project's root directory**.
 
 ### Suffix generation
 
-In this step, we take a dataset of instructions, and generate a suffix for each instruction that induces the desired behavior (e.g. not refusing a dangerous instruction).
+In this step, we take a dataset of (`goal`, `target`) pairs and generate a suffix for each `goal` that induces the `target` generation.
 
-To run this step on a dataset of instructions:
 ```bash
 python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
     --dataset_path <path_to_dataset> \
     --results_dir <path_to_results_dir> \
     --logs_dir <path_to_logs_dir> \
     --config_path <path_to_config>
-    --start_idx <idx_of_first_prompt> \
-    --end_idx <idx_of_last_prompt>
 ```
 
-- `dataset_path` points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
-- `results_dir` is the directory where the generated suffixes will be saved.
-- `logs_dir` is the directory where the logs will be saved.
-- `config_path` is the path of the config file containing the parameters that will be used to run the attack. The default config used is `./jailbreak_steering/suffix_gen/configs/suffix_gen_config.json`.
-- `start_idx` and `end_idx` (non-inclusive) define a slice of the dataset. The attack is run only for the prompts in `dataset[start_idx:end_idx]`. By default we take only the first 10 prompts.
+**Arguments**
+
+- `--dataset_path`: path to the dataset CSV file containing goal and target columns.
+- `--results_dir`: directory where the generated suffixes will be stored.
+- `--logs_dir`: directory for saving logs.
+- `--config_path`: path to the configuration file.
+- `--start_idx` and `--end_idx`: range of dataset entries to process (end index is non-inclusive) - the suffix gen is run only for the prompts in `dataset[start_idx:end_idx]` 
+- `--seed`: random seed for suffix generation.
+- `--retry_failed`: boolean flag to retry generating suffixes that failed previously.
 
 ### Process suffix generation results
 
-Before generating steering vectors, we'll process the results from suffix generation,
-creating a dataset with the proper formatting.
+Before generating steering vectors, we'll process the results from suffix generation, creating a dataset with the proper formatting.
 
-To run this step:
 ```bash
 python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
     --suffix_gen_results_path <path_to_suffix_gen_results> \
     --output_dir <path_to_output_dir>
 ```
+
+**Arguments**
+- `--suffix_gen_results_path`: path to the file containing successful suffix generation results.
+- `--output_path`: file path where the processed results will be saved.
+- `--pair_with_random_suffix`: boolean flag to pair each instruction with a randomly generated suffix.
+- `--suffix_induces_behavior`: boolean flag label the combination of instruction and suffix as `instruction_inducing_behavior`.
+- `--suffix_does_not_induce_behavior`: boolean flag to label the combination of instruction and suffix as `instruction_not_inducing_behavior`.
 
 ### Vector generation
 
@@ -140,7 +143,3 @@ To run tests, run:
 ```bash
 pytest
 ```
-
-
-## Step-by-step
-
