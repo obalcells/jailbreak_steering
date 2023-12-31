@@ -185,10 +185,10 @@ class LlamaWrapper:
                 # We shift the instruction end index by the number of padding tokens added
                 pad_token_id = kwargs.get("pad_token_id", self.tokenizer.pad_token_id)
                 instr_pos -= (tokens == pad_token_id).sum(dim=-1, keepdim=True)
+                # The vector is added starting from the last token in the end instruction string ('[/INST]')
+                self.set_after_positions(instr_pos - 1)
             else:
                 instr_pos = None
-            # The vector is added starting from the last token in the end instruction string ('[/INST]')
-            self.set_after_positions(instr_pos - 1)
             output_tokens = self.model.generate(tokens, **kwargs)
             return output_tokens
 
@@ -196,10 +196,10 @@ class LlamaWrapper:
         with t.no_grad():
             if self.add_only_after_end_str:
                 instr_pos = [find_instruction_end_postion(tokens[i], self.END_STR) for i in range(tokens.size(0))]
-                instr_pos = t.tensor(instr_pos).to(self.device)
+                instr_pos = t.tensor(instr_pos).unsqueeze(-1).to(self.device)
+                self.set_after_positions(instr_pos - 1)
             else:
                 instr_pos = None
-            self.set_after_positions(instr_pos - 1)
             logits = self.model(tokens).logits
             return logits
 
