@@ -13,16 +13,16 @@ from typing import List
 
 from jailbreak_steering.utils.llama_wrapper import LlamaWrapper
 from jailbreak_steering.vector_gen.comparison_datasets import InstructionAnswerComparisonDataset, InstructionComparisonDataset
-from jailbreak_steering.suffix_gen.process_suffix_gen import DEFAULT_OUTPUT_DIR, NO_SUFFIX_DATASET_FILENAME
+from jailbreak_steering.suffix_gen.process_suffix_gen import DEFAULT_OUTPUT_PATH
 
-DEFAULT_DATASET_PATH = os.path.join(DEFAULT_OUTPUT_DIR, NO_SUFFIX_DATASET_FILENAME)
-DEFAULT_LABEL = "no_suffix"
+DEFAULT_DATASET_PATH = DEFAULT_OUTPUT_PATH
+DEFAULT_LABEL = "label"
 DEFAULT_VECTORS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vectors")
 DEFAULT_ACTIVATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activations")
 
 SYSTEM_PROMPT = None
 
-def generate_save_vectors(label: str, data_path: str, data_type: str, layers: List[int], vectors_dir: str, activations_dir: str, save_activations: bool):
+def generate_save_vectors(label: str, dataset_path: str, data_type: str, layers: List[int], vectors_dir: str, activations_dir: str, save_activations: bool):
     if not os.path.exists(vectors_dir):
         os.makedirs(vectors_dir)
     if save_activations and not os.path.exists(activations_dir):
@@ -37,13 +37,13 @@ def generate_save_vectors(label: str, data_path: str, data_type: str, layers: Li
 
     if data_type == "instruction":
         dataset = InstructionComparisonDataset(
-            data_path,
+            dataset_path,
             SYSTEM_PROMPT,
             model.tokenizer,
         )
     elif data_type == "instruction_answer":
         dataset = InstructionAnswerComparisonDataset(
-            data_path,
+            dataset_path,
             SYSTEM_PROMPT,
             model.tokenizer,
         )
@@ -99,7 +99,7 @@ def make_tensor_save_suffix(layer, label):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", type=str, default=DEFAULT_LABEL)
-    parser.add_argument("--data_path", type=str, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
     parser.add_argument("--data_type", type=str, default="instruction")
     parser.add_argument("--layers", nargs="+", type=int, default=list(range(32)))
     parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
@@ -108,5 +108,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     generate_save_vectors(
-        args.label, args.data_path, args.data_type, args.layers, args.vectors_dir, args.activations_dir, args.save_activations
+        args.label, args.dataset_path, args.data_type, args.layers, args.vectors_dir, args.activations_dir, args.save_activations
     )
