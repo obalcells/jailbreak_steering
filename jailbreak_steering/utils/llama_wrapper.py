@@ -116,12 +116,10 @@ class BlockOutputWrapper(t.nn.Module):
 class LlamaWrapper:
     def __init__(
         self,
-        system_prompt,
         add_only_after_end_str=False,
         override_model_weights_path=None,
     ):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
-        self.system_prompt = system_prompt
         self.add_only_after_end_str = add_only_after_end_str
 
         self.model = load_llama_2_7b_chat_model()
@@ -144,30 +142,6 @@ class LlamaWrapper:
     def set_after_positions(self, pos: Int[Tensor, "batch_size 1"]):
         for layer in self.model.model.layers:
             layer.after_position = pos
-
-    def generate_text(self, prompt: str, max_new_tokens: int = 50) -> str:
-        tokens = tokenize_llama_chat(
-            self.tokenizer,
-            conversation=[(prompt, None)],
-            system_prompt=self.system_prompt,
-            no_final_eos=True,
-        )
-        tokens = t.tensor(tokens).unsqueeze(0).to(self.device)
-        output_tokens = self.model.generate(tokens, max_new_tokens=max_new_tokens)
-        return self.tokenizer.batch_decode(output_tokens)[0]
-
-    def generate_text_with_conversation_history(
-        self, history: Tuple[str, Optional[str]], max_new_tokens=50
-    ) -> str:
-        tokens = tokenize_llama_chat(
-            self.tokenizer,
-            conversation=history,
-            system_prompt=self.system_prompt,
-            no_final_eos=True
-        )
-        tokens = t.tensor(tokens).unsqueeze(0).to(self.device)
-        output_tokens = self.model.generate(tokens, max_new_tokens=max_new_tokens)
-        return self.tokenizer.batch_decode(output_tokens)[0]
 
     def generate(self, tokens, **kwargs):
         kwargs["max_new_tokens"] = 50 if kwargs.get("max_new_tokens") is None else kwargs.get("max_new_tokens")

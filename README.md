@@ -49,10 +49,10 @@ python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
 
 **Arguments**
 - `--suffix_gen_results_path`: path to the file containing successful suffix generation results.
-- `--output_path`: file path where the processed results will be saved.
-- `--pair_with_random_suffix`: boolean flag to pair each instruction with a randomly generated suffix.
-- `--suffix_induces_behavior`: boolean flag label the combination of instruction and suffix as `instruction_inducing_behavior`.
-- `--suffix_does_not_induce_behavior`: boolean flag to label the combination of instruction and suffix as `instruction_not_inducing_behavior`.
+- `--output_path`: File path where the processed results will be saved.
+- `--pair_with_random_suffix`: Boolean flag to pair each instruction with a randomly generated suffix.
+- `--suffix_induces_behavior`: Boolean flag label the combination of instruction and suffix as `instruction_inducing_behavior`.
+- `--suffix_does_not_induce_behavior`: Boolean flag to label the combination of instruction and suffix as `instruction_not_inducing_behavior`.
 
 ### Vector generation
 
@@ -68,8 +68,8 @@ python3 -m jailbreak_steering.vector_gen.run_vector_gen \
 - `--dataset_path`: Path to the dataset file.
 - `--vectors_dir`: Directory to save the generated vectors.
 - `--data_type`: Type of data to process, either `instruction` or `instruction_answer`.
-  - `instruction`: each dataset example consists of `instruction_inducing_behavior`,`instruction_not_inducing_behavior`.
-  - `instruction_answer`: each dataset example consists of `instruction`, `answer_matching_behavior`, `answer_not_matching_behavior`.
+  - `instruction`: Each dataset example consists of `instruction_inducing_behavior`,`instruction_not_inducing_behavior`.
+  - `instruction_answer`: Each dataset example consists of `instruction`, `answer_matching_behavior`, `answer_not_matching_behavior`.
 - `--use_default_system_prompt`: Boolean flag to use the default system prompt. If not set, no system prompt is used.
 - `--save_activations`: Boolean flag to save the activation tensors.
 - `--activations_dir`: Directory to save the activation tensors.
@@ -78,22 +78,22 @@ python3 -m jailbreak_steering.vector_gen.run_vector_gen \
 ```bash
 python3 -m jailbreak_steering.test_steering.run_steered_completion.py \
     --dataset_path <path_to_data> \
-    --hf_dataset <hf_dataset_id> \
-    --results_dir <path_to_results_dir> \
     --vectors_dir <path_to_vectors_dir> \
+    --results_dir <path_to_results_dir> \
     --config_path <path_to_steering_config> \
-    --run_locally <boolean_flag_run_locally_or_modal> \
-    --num_test_datapoints <max_number_prompts> \
+    --run_locally
     --max_new_tokens <number_tokens_generated_per_prompt> \
 ```
 
-- `dataset_path` points to a dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
-- `hf_dataset` is the name of a Huggingface dataset that we'll run generations for. This is set to `None` by default, but if we pass a value then we'll use a Huggingface dataset instead of passing the path to a locally stored dataset. The supported Huggingface datasets at the moment are `obalcells/advbench` and `tatsu-lab/alpaca`.
-- `results_dir` is the directory where the generated suffixes will be saved.
-- `config_path` is the path of the config file containing the parameters that will be used to perform the steering. The default config used is `./jailbreak_steering/test_steering/configs/add_layer_19.json`. This config specified which steering vectors, multipliers, layers, system prompt, etc to use and it's agnostic to the datase and any kind of generation parameters.
-- `run_locally` is a boolean flag specifying whether to run the steering locally or in a [Modal](https://modal.com) instance. This is set to `True` by default.
-- `num_test_datapoints` specifies how many instructions to take from the dataset. This is set to `None` by default which means taking the whole dataset.
-- `max_new_tokens` specifies the number of tokens we want to generate for each prompt. This is set to `50` by default.
+- `--dataset_path`: Path to the dataset of instructions, which is assumed to be a csv with a column `goal` (the instruction, e.g. `Tell me how to make a bomb`) and a column `target` (the target response, e.g. `Sure, here's how to make a bomb`).
+- `--vectors_dir`: Directory where the vectors are stored.
+- `--results_dir`: Directory where the generated suffixes will be saved.
+- `--config_path`: Path of the config file containing the parameters that will be used to perform the steering. This config specifies which steering vector layers, multipliers, etc to use.
+- `--run_locally`: Boolean flag specifying whether to run the steering locally or in a [Modal](https://modal.com) instance. This is set to `True` by default.
+- `--max_new_tokens`: Specifies the number of tokens we want to generate for each prompt. This is set to `50` by default.
+- `--use_default_system_prompt`: Boolean flag to use the default system prompt. If not set, no system prompt is used.
+- `--num_test_datapoints`: Specifies how many instructions to take from the dataset. This is set to `None` by default which means taking the whole dataset.
+- `--hf_dataset`: Name of a Huggingface dataset that we'll run generations for. This is set to `None` by default, but if we pass a value then we'll use a Huggingface dataset instead of passing the path to a locally stored dataset. The supported Huggingface datasets at the moment are `obalcells/advbench` and `tatsu-lab/alpaca`.
 
 ### Calculate attack success rate
 

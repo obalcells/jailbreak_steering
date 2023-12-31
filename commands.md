@@ -47,6 +47,7 @@ python3 -m jailbreak_steering.steered_completion.run_steered_completion \
     --results_path ./jailbreak_steering/steered_completion/results/advbench_suffix/results_layer_19.json \
     --vectors_dir ./jailbreak_steering/vector_gen/vectors/advbench_suffix \
     --config_path ./jailbreak_steering/steered_completion/configs/sub_layer_19.json \
+    --use_default_system_prompt \
     --run_locally \
     --max_new_tokens 100
 ```
@@ -59,6 +60,7 @@ python3 -m jailbreak_steering.steered_completion.run_steered_completion \
     --results_path ./jailbreak_steering/steered_completion/results/advbench_baseline/results.json \
     --vectors_dir ./jailbreak_steering/vector_gen/vectors/advbench_suffix \
     --config_path ./jailbreak_steering/steered_completion/configs/baseline_config.json \
+    --use_default_system_prompt \
     --run_locally \
     --max_new_tokens 100
 ```

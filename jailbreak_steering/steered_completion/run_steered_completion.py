@@ -4,7 +4,7 @@ import os
 import gc
 import math
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 import tqdm
@@ -91,11 +91,11 @@ def run_local_steered_text_generation(
     instructions: List[str],
     max_new_tokens: int,
     steering_config: Dict,
-    steering_vectors: List[torch.Tensor]
+    steering_vectors: List[torch.Tensor],
+    system_prompt: Union[str, None]
 ) -> List[str]:
 
     model = LlamaWrapper(
-        steering_config["system_prompt"],
         add_only_after_end_str=not steering_config["add_every_token_position"],
     )
     model.set_save_internal_decodings(False)
@@ -116,7 +116,7 @@ def run_local_steered_text_generation(
         format_instruction_answer_llama_chat(
             model.tokenizer,
             [(instruction, None)],
-            steering_config["system_prompt"],
+            system_prompt,
             no_final_eos=True
         )
         for instruction in instructions
@@ -141,6 +141,7 @@ def run_steered_completion(
     num_test_datapoints: int = None, # None means use all datapoints
     max_new_tokens: int = 50,
     run_locally: bool = True,
+    use_default_system_prompt: bool = False
 ):
     steering_config = load_config(config_path)
 
@@ -159,10 +160,12 @@ def run_steered_completion(
 
     num_test_datapoints = len(instructions)
 
+    system_prompt = "default" if use_default_system_prompt else None
+
     start_time = time.time()
 
     generations = run_local_steered_text_generation(
-        instructions, max_new_tokens, steering_config, steering_vectors
+        instructions, max_new_tokens, steering_config, steering_vectors, system_prompt
     )
 
     runtime = round(time.time() - start_time)
@@ -170,6 +173,7 @@ def run_steered_completion(
     results = {}
 
     results["config"] = steering_config
+    results["system_prompt"] = system_prompt
     results["vectors_dir"] = vectors_dir
     results["local_data_path"] = local_data_path
     results["num_test_datapoints"] = num_test_datapoints
@@ -200,6 +204,7 @@ if __name__ == "__main__":
     parser.add_argument('--run_locally', action='store_true', default=True)
     parser.add_argument("--num_test_datapoints", type=int, default=None)
     parser.add_argument("--max_new_tokens", type=int, default=50)
+    parser.add_argument("--use_default_system_prompt", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -214,4 +219,5 @@ if __name__ == "__main__":
         num_test_datapoints=args.num_test_datapoints,
         max_new_tokens=args.max_new_tokens,
         run_locally=args.run_locally,
+        use_default_system_prompt=args.use_default_system_prompt
     )

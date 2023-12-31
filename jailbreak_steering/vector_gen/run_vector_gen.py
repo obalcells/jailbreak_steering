@@ -30,7 +30,7 @@ def generate_save_vectors(dataset_path: str, data_type: str, vectors_dir: str, u
 
     system_prompt = "default" if use_default_system_prompt else None
 
-    model = LlamaWrapper(system_prompt)
+    model = LlamaWrapper()
     model.set_save_internal_decodings(False)
     model.reset_all()
 
