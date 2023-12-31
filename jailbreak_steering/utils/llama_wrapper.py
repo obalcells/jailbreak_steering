@@ -117,18 +117,13 @@ class LlamaWrapper:
     def __init__(
         self,
         system_prompt,
-        size="7b",
-        use_chat=True,
         add_only_after_end_str=False,
         override_model_weights_path=None,
     ):
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.system_prompt = system_prompt
-        self.use_chat = use_chat
-        assert self.use_chat == True, "Only chat model is supported for now"
         self.add_only_after_end_str = add_only_after_end_str
 
-        assert size == "7b", "Only 7b model is supported"
         self.model = load_llama_2_7b_chat_model()
         self.tokenizer = load_llama_2_7b_chat_tokenizer()
 
@@ -202,17 +197,6 @@ class LlamaWrapper:
                 instr_pos = None
             logits = self.model(tokens).logits
             return logits
-
-    def get_logits_with_conversation_history(self, history: Tuple[str, Optional[str]]):
-        tokens = tokenize_llama(
-            self.tokenizer,
-            self.system_prompt,
-            history,
-            no_final_eos=True,
-            chat_model=self.use_chat,
-        )
-        tokens = t.tensor(tokens).unsqueeze(0).to(self.device)
-        return self.get_logits(tokens)
 
     def get_last_activations(self, layer):
         return self.model.model.layers[layer].activations

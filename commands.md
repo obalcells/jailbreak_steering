@@ -4,12 +4,12 @@ For `start_idx in [0, 20, ..., 400]`, `end_idx = start_idx + 20`, and `run_name 
 
 ```bash
 python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
---dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_train.csv \
---results ./jailbreak_steering/suffix_gen/runs/{run_name}/results \
---logs_dir ./jailbreak_steering/suffix_gen/runs/{run_name}/logs \
---config_path ./jailbreak_steering/suffix_gen/configs/suffix_gen_config.json \
---start_idx {start_idx} \
---end_idx {end_idx}
+    --dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_train.csv \
+    --results ./jailbreak_steering/suffix_gen/runs/{run_name}/results \
+    --logs_dir ./jailbreak_steering/suffix_gen/runs/{run_name}/logs \
+    --config_path ./jailbreak_steering/suffix_gen/configs/suffix_gen_config.json \
+    --start_idx {start_idx} \
+    --end_idx {end_idx}
 ```
 
 ### Aggregate suffix generations
@@ -22,12 +22,43 @@ python3 -m jailbreak_steering.suffix_gen.runs.aggregate_results
 
 ```bash
 python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
---suffix_gen_results_path ./jailbreak_steering/suffix_gen/runs/aggregated_results/successful_results.json \
---output_path ./datasets/processed/advbench/harmful_behaviors_train.json \
---suffix_does_not_induce_behavior
+    --suffix_gen_results_path ./jailbreak_steering/suffix_gen/runs/aggregated_results/successful_results.json \
+    --output_path ./datasets/processed/advbench/advbench_suffix.json \
+    --suffix_does_not_induce_behavior
 ```
 
 ### Vector generation
 
 ```bash
+python3 -m jailbreak_steering.vector_gen.run_vector_gen \
+    --dataset_path ./datasets/processed/advbench/advbench_suffix.json \
+    --vectors_dir ./jailbreak_steering/vector_gen/vectors/advbench_suffix \
+    --data_type instruction \
+    --use_default_system_prompt
+```
+
+### Steered completion
+
+Adding the vector extracted from suffix pairs:
+
+```bash
+python3 -m jailbreak_steering.steered_completion.run_steered_completion \
+    --dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_eval.csv \
+    --results_path ./jailbreak_steering/steered_completion/results/advbench_suffix/results_layer_19.json \
+    --vectors_dir ./jailbreak_steering/vector_gen/vectors/advbench_suffix \
+    --config_path ./jailbreak_steering/steered_completion/configs/sub_layer_19.json \
+    --run_locally \
+    --max_new_tokens 100
+```
+
+Baseline (not adding any vectors):
+
+```bash
+python3 -m jailbreak_steering.steered_completion.run_steered_completion \
+    --dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_eval.csv \
+    --results_path ./jailbreak_steering/steered_completion/results/advbench_baseline/results.json \
+    --vectors_dir ./jailbreak_steering/vector_gen/vectors/advbench_suffix \
+    --config_path ./jailbreak_steering/steered_completion/configs/baseline_config.json \
+    --run_locally \
+    --max_new_tokens 100
 ```

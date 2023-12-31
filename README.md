@@ -59,17 +59,24 @@ python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
 To generate steering vectors, run:
 ```bash
 python3 -m jailbreak_steering.vector_gen.run_vector_gen \
-    --label <label> \
-    --data_path <path_to_data> \
-    --layers <layers> \
+    --dataset_path <path_to_data> \
     --vectors_dir <path_to_vectors_dir> \
-    --activations_dir <path_to_activations_dir> \
-    --save_activations <save_activations>
+    --data_type <data_type>
 ```
 
-### Text generation applying steering vectors
+**Arguments**
+- `--dataset_path`: Path to the dataset file.
+- `--vectors_dir`: Directory to save the generated vectors.
+- `--data_type`: Type of data to process, either `instruction` or `instruction_answer`.
+  - `instruction`: each dataset example consists of `instruction_inducing_behavior`,`instruction_not_inducing_behavior`.
+  - `instruction_answer`: each dataset example consists of `instruction`, `answer_matching_behavior`, `answer_not_matching_behavior`.
+- `--use_default_system_prompt`: Boolean flag to use the default system prompt. If not set, no system prompt is used.
+- `--save_activations`: Boolean flag to save the activation tensors.
+- `--activations_dir`: Directory to save the activation tensors.
+
+### Generating steered completions
 ```bash
-python3 -m jailbreak_steering.test_steering.prompting_with_steering.py \
+python3 -m jailbreak_steering.test_steering.run_steered_completion.py \
     --dataset_path <path_to_data> \
     --hf_dataset <hf_dataset_id> \
     --results_dir <path_to_results_dir> \

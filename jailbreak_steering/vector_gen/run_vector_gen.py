@@ -22,15 +22,19 @@ DEFAULT_ACTIVATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)
 
 SYSTEM_PROMPT = None
 
-def generate_save_vectors(label: str, dataset_path: str, data_type: str, layers: List[int], vectors_dir: str, activations_dir: str, save_activations: bool):
+def generate_save_vectors(dataset_path: str, data_type: str, vectors_dir: str, use_default_system_prompt: bool, activations_dir: str, save_activations: bool):
     if not os.path.exists(vectors_dir):
         os.makedirs(vectors_dir)
     if save_activations and not os.path.exists(activations_dir):
         os.makedirs(activations_dir)
 
-    model = LlamaWrapper(SYSTEM_PROMPT)
+    system_prompt = "default" if use_default_system_prompt else None
+
+    model = LlamaWrapper(system_prompt)
     model.set_save_internal_decodings(False)
     model.reset_all()
+
+    layers = list(range(len(model.model.model.layers)))
 
     pos_activations = dict([(layer, []) for layer in layers])
     neg_activations = dict([(layer, []) for layer in layers])
@@ -38,13 +42,13 @@ def generate_save_vectors(label: str, dataset_path: str, data_type: str, layers:
     if data_type == "instruction":
         dataset = InstructionComparisonDataset(
             dataset_path,
-            SYSTEM_PROMPT,
+            system_prompt,
             model.tokenizer,
         )
     elif data_type == "instruction_answer":
         dataset = InstructionAnswerComparisonDataset(
             dataset_path,
-            SYSTEM_PROMPT,
+            system_prompt,
             model.tokenizer,
         )
     else:
@@ -74,7 +78,7 @@ def generate_save_vectors(label: str, dataset_path: str, data_type: str, layers:
             vec,
             os.path.join(
                 vectors_dir,
-                f"vec_layer_{make_tensor_save_suffix(layer, label)}.pt",
+                f"vec_layer_{layer}.pt",
             ),
         )
         if save_activations:
@@ -82,31 +86,27 @@ def generate_save_vectors(label: str, dataset_path: str, data_type: str, layers:
                 all_pos_layer,
                 os.path.join(
                     activations_dir,
-                    f"activations_pos_{make_tensor_save_suffix(layer, label)}.pt",
+                    f"activations_pos_{layer}.pt",
                 ),
             )
             t.save(
                 all_neg_layer,
                 os.path.join(
                     activations_dir,
-                    f"activations_neg_{make_tensor_save_suffix(layer, label)}.pt",
+                    f"activations_neg_{layer}.pt",
                 ),
             )
 
-def make_tensor_save_suffix(layer, label):
-    return f'{layer}_{label.split("/")[-1]}'
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--label", type=str, default=DEFAULT_LABEL)
     parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)
-    parser.add_argument("--data_type", type=str, default="instruction")
-    parser.add_argument("--layers", nargs="+", type=int, default=list(range(32)))
     parser.add_argument("--vectors_dir", type=str, default=DEFAULT_VECTORS_DIR)
-    parser.add_argument("--activations_dir", type=str, default=DEFAULT_ACTIVATIONS_DIR)
+    parser.add_argument("--data_type", type=str, default="instruction")
+    parser.add_argument("--use_default_system_prompt", action='store_true', default=False)
     parser.add_argument("--save_activations", action='store_true', default=False)
+    parser.add_argument("--activations_dir", type=str, default=DEFAULT_ACTIVATIONS_DIR)
 
     args = parser.parse_args()
     generate_save_vectors(
-        args.label, args.dataset_path, args.data_type, args.layers, args.vectors_dir, args.activations_dir, args.save_activations
+        args.dataset_path, args.data_type, args.vectors_dir, args.use_default_system_prompt, args.activations_dir, args.save_activations
     )
