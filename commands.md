@@ -24,7 +24,7 @@ python3 -m jailbreak_steering.suffix_gen.runs.aggregate_results
 python3 -m jailbreak_steering.suffix_gen.process_suffix_gen \
     --suffix_gen_results_path ./jailbreak_steering/suffix_gen/runs/aggregated_results/successful_results.json \
     --output_path ./datasets/processed/advbench/advbench_suffix.json \
-    --suffix_does_not_induce_behavior
+    --suffix_induces_behavior
 ```
 
 ### Vector generation
@@ -46,7 +46,7 @@ python3 -m jailbreak_steering.steered_completion.run_steered_completion \
     --dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_eval.csv \
     --results_path ./results/advbench_suffix_sys/steered_completion/layer_19.json \
     --vectors_dir ./results/advbench_suffix_sys/vectors \
-    --config_path ./jailbreak_steering/steered_completion/configs/sub_layer_19.json \
+    --config_path ./jailbreak_steering/steered_completion/configs/add_layer_19.json \
     --use_default_system_prompt \
     --run_locally \
     --max_new_tokens 100
