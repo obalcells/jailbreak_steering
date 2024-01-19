@@ -2,6 +2,7 @@ import torch
 from transformers import AutoTokenizer
 
 from jailbreak_steering.utils.tokenize_llama_chat import tokenize_llama_chat, E_INST, find_string_in_tokens
+from jailbreak_steering.utils.tokenize_qwen_chat import tokenize_qwen_chat
 
 class PromptManager(object):
     """A class used to manage the prompt during optimization."""
@@ -24,11 +25,20 @@ class PromptManager(object):
         self._update_ids()
 
     def _update_ids(self):
-        toks = tokenize_llama_chat(
+
+        # toks = tokenize_llama_chat(
+        #     self.tokenizer,
+        #     conversation=[(f"{self.instruction} {self.control}", self.target)],
+        #     system_prompt=self.system_prompt,
+        #     no_final_eos=True,
+        # )
+
+        toks = tokenize_qwen_chat(
             self.tokenizer,
-            conversation=[(f"{self.instruction} {self.control}", self.target)],
-            system_prompt=self.system_prompt,
-            no_final_eos=True,
+            instruction=f"{self.instruction}{self.control}",
+            target=self.target,
+            system=self.system_prompt,
+            include_trailing_newline=True
         )
 
         self._instruction_slice = find_string_in_tokens(self.instruction, toks, self.tokenizer)

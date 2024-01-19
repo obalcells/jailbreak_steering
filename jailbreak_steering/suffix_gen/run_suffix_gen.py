@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
-from jailbreak_steering.utils.load_model import load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
+from jailbreak_steering.utils.load_model import load_qwen_7b_chat_model, load_qwen_7b_chat_tokenizer, load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
 
 DEFAULT_DATASET_PATH = "datasets/unprocessed/advbench/harmful_behaviors_train.csv"
 DEFAULT_SUFFIX_GEN_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
@@ -143,13 +143,17 @@ def is_successful(result):
 
 def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_path: str, start_idx: int, end_idx: int, seed: int, retry_failed: bool):
 
-    model = load_llama_2_7b_chat_model()
-    tokenizer = load_llama_2_7b_chat_tokenizer()
+    # model = load_llama_2_7b_chat_model()
+    # tokenizer = load_llama_2_7b_chat_tokenizer()
+
+    model = load_qwen_7b_chat_model()
+    tokenizer = load_qwen_7b_chat_tokenizer()
 
     instructions, targets = load_dataset(dataset_path, n=None)
     config = load_config(config_path)
     default_control_init = ' '.join(['!' for _ in range(config['control_len'])])
- 
+    default_control_init = ' ' + default_control_init
+
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)

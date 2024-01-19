@@ -13,7 +13,6 @@ from typing import Optional, List, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
-from jailbreak_steering.utils.tokenize_llama_chat import DEFAULT_SYSTEM_PROMPT
 
 LOG_FLUSH_INTERVAL = 10
 MAX_EVAL_BATCH_SIZE = 128 # limits the effective batch size for evaluations, useful to limit memory usage
@@ -124,7 +123,8 @@ class SuffixGen():
         target_slice = self.prompt._target_slice
         loss_slice = self.prompt._loss_slice
 
-        embed_weights = self.model.model.embed_tokens.weight
+        # embed_weights = self.model.model.embed_tokens.weight
+        embed_weights = self.model.transformer.wte.weight
 
         suffix_len = control_slice.stop - control_slice.start
         d_vocab = embed_weights.shape[0]
@@ -136,7 +136,8 @@ class SuffixGen():
         control_toks_one_hot.requires_grad_()
 
         # Weave the grad-enabled control embeddings in with the other embeddings
-        input_embeds = self.model.model.embed_tokens(input_ids.unsqueeze(0)).detach()
+        # input_embeds = self.model.model.embed_tokens(input_ids.unsqueeze(0)).detach()
+        input_embeds = self.model.transformer.wte(input_ids.unsqueeze(0)).detach()
         control_embeds = (control_toks_one_hot @ embed_weights).unsqueeze(0)
         full_embeds = torch.cat(
             [
@@ -222,8 +223,8 @@ class SuffixGen():
 
         for i in range(control_cand.shape[0]):
             if (decoded_cands[i] != curr_control and # filter duplicates of current candidate
-                len(re_encoded_cands[i]) == len(control_cand[i]) and # ensure that the number of tokens is preserved
-                decoded_cands[i] == decoded_cands[i].strip() # ensure that the candidate doesn't begin/end with whitespace
+                len(re_encoded_cands[i]) == len(control_cand[i]) # ensure that the number of tokens is preserved
+                # decoded_cands[i] == decoded_cands[i].strip() # ensure that the candidate doesn't begin/end with whitespace
             ):
                 valid_cand_idxs.append(i)
 
@@ -239,6 +240,8 @@ class SuffixGen():
         cands_toks = cands_toks + [cands_toks[-1]] * (self.batch_size - len(cands_toks))
 
         cands_toks = torch.stack(cands_toks, dim=0)
+
+        print(f"Max len of cand token: {cands_toks.shape[-1]}")
 
         return cands, cands_toks
 
