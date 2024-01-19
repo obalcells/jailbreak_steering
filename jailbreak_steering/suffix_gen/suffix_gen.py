@@ -92,6 +92,14 @@ class SuffixGen():
 
             if (n_step+1) % LOG_FLUSH_INTERVAL == 0:
                 self._save_log()
+                print(f"full_prompt: {repr(self.prompt.full_prompt_str)}")
+                print(f"full_prompt: {repr(self.tokenizer.decode(self.prompt.input_ids))}")
+                print(f"loss_str: {repr(self.prompt.loss_str)}")
+                print(f"loss_str: {repr(self.tokenizer.decode(self.prompt.input_ids[self.prompt._loss_slice]))}")
+                print(f"target_str: {repr(self.prompt.target_str)}")
+                print(f"target_str: {repr(self.tokenizer.decode(self.prompt.input_ids[self.prompt._target_slice]))}")
+                print(f"control_str: {repr(self.prompt.control_str)}")
+                print(f"control_str: {repr(self.tokenizer.decode(self.prompt.input_ids[self.prompt._control_slice]))}")
 
         self._finalize_log(best_control, best_loss)
         self._save_log()
