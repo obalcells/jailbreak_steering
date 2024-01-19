@@ -33,8 +33,11 @@ def format_qwen_chat(
         formatted_instruction = QWEN_CHAT_TEMPLATE.format(instruction=instruction)
     if not include_trailing_newline:
         formatted_instruction = formatted_instruction.strip()
-    
-    return f"{formatted_instruction}{target}"
+
+    if target is None:
+        return formatted_instruction
+    else:
+        return f"{formatted_instruction}{target}"
 
 def tokenize_qwen_chat(
     tokenizer: AutoTokenizer,
