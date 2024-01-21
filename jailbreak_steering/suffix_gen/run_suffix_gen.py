@@ -165,13 +165,13 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
     for idx in range(start_idx, end_idx):
         instruction, target = instructions[idx], targets[idx]
 
-        if instruction in [result['instruction'] for result in successful_results]:
-            print(f"Skipping instruction {instruction} because it has already been successfully processed.")
-            continue
+        # if instruction in [result['instruction'] for result in successful_results]:
+        #     print(f"Skipping instruction {instruction} because it has already been successfully processed.")
+        #     continue
 
-        if not retry_failed and instruction in [result['instruction'] for result in all_results]:
-            print(f"Skipping instruction {instruction} because it has already been processed.")
-            continue
+        # if not retry_failed and instruction in [result['instruction'] for result in all_results]:
+        #     print(f"Skipping instruction {instruction} because it has already been processed.")
+        #     continue
 
         print(f"Running instruction {instruction} ({idx} / {len(instructions)})")
         
