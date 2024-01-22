@@ -94,6 +94,7 @@ def evaluate_generation(
     outputs = model.generate(
         prompt.input_ids[:prompt._target_slice.start].unsqueeze(0),
         max_new_tokens=max_new_tokens,
+        do_sample=False,
     )
     generation = tokenizer.batch_decode(outputs[:, prompt._target_slice.start:])[0]
 
@@ -199,6 +200,7 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
             "system_prompt": config['system_prompt'],
             "steps": steps,
             "loss": loss,
+            "control_ids": tokenizer.encode(control, add_special_tokens=False),
         }
 
         all_results.append(result)
