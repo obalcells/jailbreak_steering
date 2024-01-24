@@ -219,10 +219,25 @@ class SuffixGen():
         curr_control: str,
     ) -> Tuple[List[str], Int[Tensor, "batch_size suffix_len"]]:
 
-        decoded_cands = self.tokenizer.batch_decode(control_cand, skip_special_tokens=True)
+        cur_prompt_tok_len = self.prompt.input_ids.shape[-1]
 
-        re_encoded_cands = self.tokenizer(
-            decoded_cands,
+        # we need to check that each candidate yields a tokenized prompt length matching the current one
+
+        decoded_cands = self.tokenizer.batch_decode(control_cand, skip_special_tokens=False)
+
+        prompt_cands = [
+            PromptManager(
+                instruction=self.prompt.instruction,
+                target=self.prompt.target,
+                tokenizer=self.prompt.tokenizer,
+                system_prompt=self.prompt.system_prompt,
+                control_init=cand,
+                device=self.prompt.device
+            ).full_prompt_str for cand in decoded_cands
+        ]
+
+        re_encoded_cand_prompts = self.tokenizer(
+            prompt_cands,
             add_special_tokens=False,
             padding=False,
         ).input_ids
@@ -231,10 +246,11 @@ class SuffixGen():
 
         for i in range(control_cand.shape[0]):
             if (decoded_cands[i] != curr_control and # filter duplicates of current candidate
-                len(re_encoded_cands[i]) == len(control_cand[i]) # ensure that the number of tokens is preserved
-                # decoded_cands[i] == decoded_cands[i].strip() # ensure that the candidate doesn't begin/end with whitespace
+                len(re_encoded_cand_prompts[i]) == cur_prompt_tok_len # ensure that the number of tokens is preserved
             ):
                 valid_cand_idxs.append(i)
+            # else:
+            #     print(f"Filtered out candidate: {repr(decoded_cands[i])} (len {len(re_encoded_cand_prompts[i])} != {cur_prompt_tok_len})")
 
         cands = [decoded_cands[i] for i in valid_cand_idxs]
         cands_toks = [control_cand[i] for i in valid_cand_idxs]

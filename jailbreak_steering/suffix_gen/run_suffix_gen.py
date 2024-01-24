@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from jailbreak_steering.suffix_gen.prompt_manager import PromptManager
 from jailbreak_steering.suffix_gen.suffix_gen import SuffixGen
-from jailbreak_steering.utils.load_model import load_qwen_7b_chat_model, load_qwen_7b_chat_tokenizer, load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
+from jailbreak_steering.utils.load_model import load_qwen_1_8b_chat_model, load_qwen_1_8b_chat_tokenizer, load_qwen_7b_chat_model, load_qwen_7b_chat_tokenizer, load_llama_2_7b_chat_model, load_llama_2_7b_chat_tokenizer
 
 DEFAULT_DATASET_PATH = "datasets/unprocessed/advbench/harmful_behaviors_train.csv"
 DEFAULT_SUFFIX_GEN_LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
@@ -147,8 +147,11 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
     # model = load_llama_2_7b_chat_model()
     # tokenizer = load_llama_2_7b_chat_tokenizer()
 
-    model = load_qwen_7b_chat_model()
-    tokenizer = load_qwen_7b_chat_tokenizer()
+    # model = load_qwen_7b_chat_model()
+    # tokenizer = load_qwen_7b_chat_tokenizer()
+
+    model = load_qwen_1_8b_chat_model()
+    tokenizer = load_qwen_1_8b_chat_tokenizer()
 
     instructions, targets = load_dataset(dataset_path, n=None)
     config = load_config(config_path)
