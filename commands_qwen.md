@@ -87,3 +87,15 @@ nohup python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
 >     --end_idx 16 > out.txt 2>&1 &
 [1] 7924
 ```
+
+
+```
+nohup python3 -m jailbreak_steering.suffix_gen.run_suffix_gen \
+    --dataset_path ./datasets/unprocessed/advbench/harmful_behaviors_train.csv \
+    --results ./jailbreak_steering/suffix_gen/runs/qwen_1_8B_short_1/results \
+    --logs_dir ./jailbreak_steering/suffix_gen/runs/qwen_1_8B_short_1/logs \
+    --config_path ./jailbreak_steering/suffix_gen/configs/custom_suffix_gen_config.json \
+    --start_idx 0 \
+    --end_idx 100 > out.txt 2>&1 &
+[1] 4809
+```
