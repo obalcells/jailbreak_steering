@@ -3,10 +3,9 @@
     "max_steps": 500,
     "batch_size": 256,
     "topk": 128,
-    "early_stop_threshold": 0.02,
+    "early_stop_threshold": 0.01,
     "success_threshold": 0.05,
-    "reuse_control": true,
-    "reset_control_after": 5,
+    "reuse_control": false,
     "control_len": 20,
     "verbose": true,
     "use_cache": true
