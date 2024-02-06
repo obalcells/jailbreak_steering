@@ -15,7 +15,7 @@ from jailbreak_steering.utils.tokenize_llama_chat import format_instruction_answ
 from jailbreak_steering.vector_gen.run_vector_gen import DEFAULT_VECTORS_DIR
 
 DEFAULT_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results/results.json")
-DEFAULT_STEERING_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs", "add_layer_19.json")
+DEFAULT_STEERING_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs", "sub_layer_19.json")
 DEFAULT_MAX_NEW_TOKENS = 50 
 
 def get_steering_vector(layer, vectors_dir):

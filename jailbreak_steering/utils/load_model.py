@@ -34,3 +34,7 @@ def load_llama_2_7b_chat_tokenizer():
     tokenizer.padding_side = "left"
 
     return tokenizer
+
+if __name__ == "__main__":
+    model = load_llama_2_7b_chat_model()
+    tokenizer = load_llama_2_7b_chat_tokenizer()
