@@ -1,3 +1,13 @@
+#%%
+from IPython import get_ipython
+ipython = get_ipython()
+ipython.magic("load_ext autoreload")
+ipython.magic("autoreload 2")
+
+# %%
+ipython.magic("cd ../..")
+
+#%%
 import argparse
 import os
 import json
@@ -54,6 +64,13 @@ REFUSAL_PHRASES = [
 ]
 
 MAX_NEW_TOKENS = 256
+
+# %%
+model = load_qwen_1_8b_chat_model()
+tokenizer = load_qwen_1_8b_chat_tokenizer()
+
+# %%
+
 
 def load_config(config_file):
     with open(config_file, 'r') as file:
@@ -150,8 +167,8 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
     # model = load_qwen_7b_chat_model()
     # tokenizer = load_qwen_7b_chat_tokenizer()
 
-    model = load_qwen_1_8b_chat_model()
-    tokenizer = load_qwen_1_8b_chat_tokenizer()
+    # model = load_qwen_1_8b_chat_model()
+    # tokenizer = load_qwen_1_8b_chat_tokenizer()
 
     instructions, targets = load_dataset(dataset_path, n=None)
     config = load_config(config_path)
@@ -220,6 +237,20 @@ def run_suffix_gen(dataset_path: str, results_dir: str, logs_dir: str, config_pa
 
         gc.collect(); torch.cuda.empty_cache()
 
+# %%
+run_suffix_gen(
+    dataset_path='./datasets/unprocessed/advbench/harmful_behaviors_train.csv',
+    results_dir='./jailbreak_steering/suffix_gen/runs/qwen_1_8B_direct/results',
+    logs_dir='./jailbreak_steering/suffix_gen/runs/qwen_1_8B_direct/logs ',
+    config_path='./jailbreak_steering/suffix_gen/configs/custom_suffix_gen_config.json',
+    start_idx=0,
+    end_idx=5,
+    seed=42,
+    retry_failed=False,
+)
+
+# %%
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_path", type=str, default=DEFAULT_DATASET_PATH)

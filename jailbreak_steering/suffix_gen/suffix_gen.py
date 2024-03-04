@@ -156,16 +156,49 @@ class SuffixGen():
             dim=1
         )
 
-        # Run model and compute loss
+        # load direction
+        dif_dirs = torch.load(open(f'{os.path.dirname(os.path.abspath(__file__))}/mean_diff_dirs.pt', 'rb')).to('cuda').to(torch.float16)
+        dif_dir = dif_dirs[-1, 14]
+        dif_dir = dif_dir / dif_dir.norm()
+
+        # get activations for relevant layers via pytorch hooks
+
+        layers = list(range(14, 17))
+        activations_dict = {}
+        def get_activation(name):
+            def hook(model, input, output):
+                activations_dict[name] = output[0]
+            return hook
+
+        hooks = []
+        for layer in layers:
+            hook = self.model.transformer.h[layer].register_forward_hook(get_activation(layer))
+            hooks.append(hook)
+
+        # Run model
         logits = self.model(inputs_embeds=full_embeds).logits
+
+        activations = torch.cat([activations_dict[layer] for layer in layers], dim=0)
+
+        # harm components
+        harm_components = einops.einsum(activations, dif_dir, 'layers seq_len d_model, d_model -> layers seq_len')
+        harm_components_summed = harm_components.abs().mean()
+        harm_component_loss = harm_components_summed
+
+        # (normal loss computation)
         targets = input_ids[target_slice]
-        loss = nn.CrossEntropyLoss()(logits[0, loss_slice, :], targets) 
+        ce_loss = nn.CrossEntropyLoss()(logits[0, loss_slice, :], targets)
+
+        loss = harm_component_loss + ce_loss
 
         # Compute gradients
         loss.backward()
         grad = control_toks_one_hot.grad.clone()
 
         # Clean up
+        for hook in hooks:
+            hook.remove()
+
         self.model.zero_grad()
         gc.collect(); torch.cuda.empty_cache()
 
@@ -280,6 +313,27 @@ class SuffixGen():
             cache_offset = 0
             past_key_values = None
 
+        # load direction
+        dif_dirs = torch.load(open(f'{os.path.dirname(os.path.abspath(__file__))}/mean_diff_dirs.pt', 'rb')).to('cuda').to(torch.float16)
+        dif_dir = dif_dirs[-1, 14]
+        dif_dir = dif_dir / dif_dir.norm()
+
+        # get activations for relevant layers via pytorch hooks
+
+        layers = list(range(14, 17))
+        activations_dict = {}
+        def get_activation(name):
+            def hook(model, input, output):
+                if name not in activations_dict:
+                    activations_dict[name] = []
+                activations_dict[name].append(output[0])
+            return hook
+
+        hooks = []
+        for layer in layers:
+            hook = self.model.transformer.h[layer].register_forward_hook(get_activation(layer))
+            hooks.append(hook)
+
         if self.batch_size > MAX_EVAL_BATCH_SIZE:
             batched_logits = []
             for i in range(self.batch_size // MAX_EVAL_BATCH_SIZE):
@@ -296,12 +350,25 @@ class SuffixGen():
                 use_cache=self.use_cache,
                 past_key_values=past_key_values
             ).logits
+        
+        all_activations = torch.stack([torch.cat(activations_dict[layer], dim=0) for layer in layers], dim=1) # batch layer seq_len d_model
+        
+        harm_components = einops.einsum(all_activations, dif_dir, 'batch layers seq_len d_model, d_model -> batch layers seq_len')
+        harm_components_summed = harm_components.abs().mean(dim=-1).mean(dim=-1)
+        harm_components_losses = losses = harm_components_summed
 
-        loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
-        losses = loss_fn(
+        ce_loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
+        ce_losses = ce_loss_fn(
             logits[:,self.prompt._loss_slice.start - cache_offset : self.prompt._loss_slice.stop - cache_offset,:].transpose(1,2), # batch_size loss_slice d_vocab -> batch_size d_vocab loss_slice
             cands_input_ids[:, self.prompt._target_slice] # batch_size loss_slice
         ).mean(dim=-1)
+
+        losses = harm_components_losses + ce_losses
+
+        for hook in hooks:
+            hook.remove()
+
+        del all_activations; gc.collect(); torch.cuda.empty_cache()
 
         return losses
 
